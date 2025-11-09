@@ -74,7 +74,7 @@ class HydravionClient private constructor(private val context: Context, private 
 
     fun getCreatorInfo(creatorGUID: String, callback: (FloatplaneLiveStream) -> Unit) {
         requestTask.sendRequest(
-            "$URI_CREATOR_INFO?creatorGUID=$creatorGUID",
+            "$URI_CREATOR_INFO?id=$creatorGUID",
             getCookiesString(),
             object : RequestTask.VolleyCallback {
                 override fun onSuccess(response: String) {
@@ -83,10 +83,9 @@ class HydravionClient private constructor(private val context: Context, private 
                     }
 
                     try {
-                        JSONArray(response).getString(0)?.let {
-                            Gson().fromJson(it, Creator::class.java).let { creator ->
-                                creator.lastLiveStream?.let { it1 -> callback.invoke(it1) }
-                            }
+                        // v3 API returns a single object, not an array
+                        Gson().fromJson(response, Creator::class.java).let { creator ->
+                            creator.lastLiveStream?.let { it1 -> callback.invoke(it1) }
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -316,17 +315,16 @@ class HydravionClient private constructor(private val context: Context, private 
         }
 
         requestTask.sendRequest(
-            "$URI_CREATOR_INFO?creatorGUID=$creatorGUID",
+            "$URI_CREATOR_INFO?id=$creatorGUID",
             getCookiesString(),
             object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     try {
-                        JSONArray(response).getString(0)?.let {
-                            Gson().fromJson(it, Creator::class.java).let { creator ->
-                                creatorCache[creatorGUID] = creator
-                                callback?.invoke(creator)
-                            }
+                        // v3 API returns a single object, not an array
+                        Gson().fromJson(response, Creator::class.java).let { creator ->
+                            creatorCache[creatorGUID] = creator
+                            callback?.invoke(creator)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -479,9 +477,9 @@ class HydravionClient private constructor(private val context: Context, private 
         private const val TAG = "HydravionClient"
         private const val SITE = "https://www.floatplane.com"
 
-        // TODO Update to v3 API
-        private const val URI_SUBSCRIPTIONS = "$SITE/api/user/subscriptions"
-        private const val URI_CREATOR_INFO = "$SITE/api/creator/info"
+        // Updated to v3 API
+        private const val URI_SUBSCRIPTIONS = "$SITE/api/v3/user/subscriptions"
+        private const val URI_CREATOR_INFO = "$SITE/api/v3/creator/info"
 
         // Already updated!
         private const val URI_DELIVERY = "$SITE/api/v3/delivery/info"
