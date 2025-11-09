@@ -130,7 +130,7 @@ public class MainFragment extends BrowseSupportFragment {
     private void checkLogin() {
         boolean gotCookies = loadCredentials();
         if (!gotCookies) {
-            Intent intent = new Intent(getActivity(), LoginActivity.class);
+            Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.QrLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
             startActivityForResult(intent, 42);
         } else {
