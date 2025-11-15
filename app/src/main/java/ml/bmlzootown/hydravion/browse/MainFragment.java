@@ -145,8 +145,9 @@ public class MainFragment extends BrowseSupportFragment {
         if (requestCode == 42 && resultCode == 1 && data != null) {
             ArrayList<String> cookies = data.getStringArrayListExtra("cookies");
             for (String cookie : cookies) {
-                String[] c = cookie.split("=");
-                if (c[0].equalsIgnoreCase("sails.sid")) {
+                // Use split with limit of 2 to handle cookie values that may contain "="
+                String[] c = cookie.split("=", 2);
+                if (c.length == 2 && c[0].equalsIgnoreCase("sails.sid")) {
                     sailssid = c[1];
                 }
             }
@@ -280,9 +281,11 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void saveCredentials() {
+        // Use commit() instead of apply() to ensure synchronous persistence
+        // This is critical for login credentials that must survive device reboots
         requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
                 .putString(Constants.PREF_SAIL_SSID, sailssid)
-                .apply();
+                .commit();
     }
 
     private void gotLiveInfo(Subscription sub, Delivery live) {
