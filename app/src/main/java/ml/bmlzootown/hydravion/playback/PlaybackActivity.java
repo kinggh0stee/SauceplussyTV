@@ -233,25 +233,35 @@ public class PlaybackActivity extends FragmentActivity {
     }
 
     private void initializePlayer() {
-        player = new ExoPlayer.Builder(this).build();
-        player.setPlayWhenReady(playWhenReady);
-        player.seekTo(currentWindow, playbackPosition);
-        playerView.setPlayer(player);
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-        String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
         AuthManager authManager = AuthManager.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
-        String accessToken = authManager.getAccessToken();
-        HashMap<String, String> headers = new HashMap<>();
-        headers.put("Authorization", "Bearer " + accessToken);
-        headers.put("User-Agent", "Hydravion (AndroidTV " + version + ")");
-        dataSourceFactory.setDefaultRequestProperties(headers);
-        int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
-        DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
-        MediaItem mi = MediaItem.fromUri(url);
-        HlsMediaSource hlsMediaSource = new HlsMediaSource.Factory(dataSourceFactory).setExtractorFactory(extractorFactory).createMediaSource(mi);
-        player.setMediaSource(hlsMediaSource);
+        authManager.withValidAccessToken(accessToken -> {
+            player = new ExoPlayer.Builder(this).build();
+            player.setPlayWhenReady(playWhenReady);
+            player.seekTo(currentWindow, playbackPosition);
+            playerView.setPlayer(player);
 
-        player.prepare();
+            DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
+            String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
+            HashMap<String, String> headers = new HashMap<>();
+            headers.put("Authorization", "Bearer " + accessToken);
+            headers.put("User-Agent", "Hydravion (AndroidTV " + version + ")");
+            dataSourceFactory.setDefaultRequestProperties(headers);
+
+            int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
+            DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
+            MediaItem mi = MediaItem.fromUri(url);
+            HlsMediaSource hlsMediaSource = new HlsMediaSource.Factory(dataSourceFactory).setExtractorFactory(extractorFactory).createMediaSource(mi);
+            player.setMediaSource(hlsMediaSource);
+
+            player.prepare();
+
+            // existing listener setup below
+            return Unit.INSTANCE;
+        }, () -> {
+            Toast.makeText(this, "Session expired. Please relink your account.", Toast.LENGTH_LONG).show();
+            finish();
+            return Unit.INSTANCE;
+        });
 
         player.addListener(new Player.Listener() {
 

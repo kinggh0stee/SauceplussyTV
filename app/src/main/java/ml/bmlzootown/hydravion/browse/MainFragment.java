@@ -151,9 +151,14 @@ public class MainFragment extends BrowseSupportFragment {
                         .putString(Constants.PREF_REFRESH_TOKEN, refreshToken)
                         .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
                         .commit();
-            }
 
-            initialize();
+                // Only initialize once we have successfully stored valid credentials
+                initialize();
+            } else {
+                dLog(TAG, "Login result missing access token; restarting login flow.");
+                // Restart login flow to avoid running without credentials
+                checkLogin();
+            }
         } else if (requestCode == Constants.REQ_CODE_DETAIL && resultCode == RESULT_OK && data != null) {
             if (data.getBooleanExtra("REFRESH", false)) {
                 refreshVideoProgress();
@@ -166,16 +171,24 @@ public class MainFragment extends BrowseSupportFragment {
         prepareBackgroundManager();
         setupUIElements();
         setupEventListeners();
-
+        // TODO: Temporarily disabled - backend doesn't support auth tokens with websockets yet
         // Setup Socket
-        setupSocket();
+        // setupSocket();
     }
 
     private void setupSocket() {
-        socket = socketClient.initialize();
-        socket.on("connect", onSocketConnect);
-        socket.on("disconnect", onSocketDisconnect);
-        socket.on("syncEvent", onSyncEvent);
+        socketClient.initialize(sock -> {
+            if (sock == null) {
+                dLog("SOCKET", "Failed to initialize socket due to auth error");
+                return Unit.INSTANCE;
+            }
+
+            socket = sock;
+            socket.on("connect", onSocketConnect);
+            socket.on("disconnect", onSocketDisconnect);
+            socket.on("syncEvent", onSyncEvent);
+            return Unit.INSTANCE;
+        });
     }
 
     // Socket Event Emitters
@@ -202,7 +215,8 @@ public class MainFragment extends BrowseSupportFragment {
 
     private final Emitter.Listener onSocketDisconnect = args -> {
         dLog("SOCKET", "Disconnected");
-        setupSocket();
+        // TODO: Temporarily disabled - backend doesn't support auth tokens with websockets yet
+        // setupSocket();
     };
 
     private final Emitter.Listener onSyncEvent = args -> {
