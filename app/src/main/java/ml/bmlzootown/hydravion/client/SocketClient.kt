@@ -11,6 +11,7 @@ import io.socket.client.Socket
 import io.socket.engineio.client.Transport
 import io.socket.engineio.client.transports.WebSocket
 import ml.bmlzootown.hydravion.Constants
+import ml.bmlzootown.hydravion.authenticate.AuthManager
 import ml.bmlzootown.hydravion.browse.MainFragment
 import ml.bmlzootown.hydravion.post.Post
 import okhttp3.OkHttpClient
@@ -22,20 +23,14 @@ import java.util.*
 
 class SocketClient private constructor(private val context: Context, private val mainPrefs: SharedPreferences) {
 
-    /**
-     * Convenience fun to get cookies string
-     * @return Cookies string
-     */
     val version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME
-
-    private fun getCookiesString(): String =
-        "${Constants.PREF_SAIL_SSID}=${mainPrefs.getString(Constants.PREF_SAIL_SSID, "")}"
+    private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
 
     fun initialize(): Socket {
         val heads = mutableMapOf<String, List<String>>()
         heads["Origin"] = listOf("https://www.floatplane.com")
-        heads["Cookie"] = listOf(getCookiesString())
-        heads["User-Agent"] = listOf("Hydravion (AndroidTV $version), CFNetwork")
+        heads["Authorization"] = listOf("Bearer ${authManager.getAccessToken()}")
+        heads["User-Agent"] = listOf("Hydravion (AndroidTV $version)")
 
         val okHttpClient = OkHttpClient.Builder().build()
         IO.setDefaultOkHttpWebSocketFactory(okHttpClient)
@@ -60,8 +55,8 @@ class SocketClient private constructor(private val context: Context, private val
                 val headers = it[0] as MutableMap<String, List<String>>
                 // Modify Request Headers
                 headers["Origin"] = listOf("https://www.floatplane.com")
-                headers["Cookie"] = listOf(getCookiesString())
-                headers["User-Agent"] = listOf("Hydravion (AndroidTV $version), CFNetwork")
+                headers["Authorization"] = listOf("Bearer ${authManager.getAccessToken()}")
+                headers["User-Agent"] = listOf("Hydravion (AndroidTV $version)")
                 MainFragment.dLog("$TAG --> MODIFYING HEADERS", headers.toString())
             }
             transport.on(Transport.EVENT_RESPONSE_HEADERS){

@@ -59,11 +59,6 @@
         <activity
             android:name=".playback.PlaybackActivity"
             android:exported="false" />
-        <!-- Not sure if this one needs to be exported or not -->
-        <activity
-            android:name=".authenticate.LoginActivity"
-            android:exported="true"
-            android:noHistory="true" />
         <activity
             android:name=".authenticate.QrLoginActivity"
             android:exported="false"

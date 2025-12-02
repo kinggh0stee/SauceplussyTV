@@ -75,7 +75,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
     private DetailsSupportFragmentBackgroundController mDetailsBackground;
 
     private static final String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
-    private static final String userAgent = String.format("Hydravion %s (AndroidTV), CFNetwork", version);
+    private static final String userAgent = String.format("Hydravion %s (AndroidTV)", version);
 
     @Override
     public void onCreate(Bundle savedInstanceState) {

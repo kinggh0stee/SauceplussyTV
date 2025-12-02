@@ -40,7 +40,7 @@
                 android:id="@+id/instructions_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Scan the QR code to enter requisite cookie. You can also visit the url below the QR code."
+                android:text="Scan the QR code or visit floatplane.com/link on another device to log in to your Floatplane account."
                 android:textColor="@android:color/white"
                 android:textSize="18sp"
                 android:lineSpacingMultiplier="1.2"
@@ -49,7 +49,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="How to get cookie:"
+                android:text="How to link your account:"
                 android:textColor="@android:color/white"
                 android:textSize="18sp"
                 android:textStyle="bold"
@@ -59,21 +59,34 @@
                 android:id="@+id/cookie_steps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="1. Login to floatplane.com\n2. Open DevTools (F12)\n3. Go to Application (Chrome) or Storage (Firefox)\n   > Cookies > floatplane.com\n4. Copy the value of sails.sid and paste in browser"
+                android:text="1. Using a browser, go to floatplane.com/link\n2. When prompted, enter the code shown on this screen\n3. Once complete, this app will sign in automatically"
                 android:textColor="@android:color/white"
                 android:textSize="16sp"
                 android:lineSpacingMultiplier="1.3"
                 android:layout_marginBottom="24dp" />
 
-            <Button
-                android:id="@+id/manual_entry_button"
+            <TextView
+                android:id="@+id/user_code_display"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Manual Entry"
+                android:text=""
                 android:textColor="@android:color/white"
-                android:textSize="18sp"
-                android:backgroundTint="#666666"
-                android:padding="16dp"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:background="#333333"
+                android:padding="20dp"
+                android:layout_marginTop="16dp" />
+
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Requesting login code..."
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:gravity="center"
                 android:layout_marginTop="16dp" />
 
         </LinearLayout>
@@ -90,64 +103,26 @@
         app:layout_constraintStart_toEndOf="@+id/instructions_scroll"
         app:layout_constraintTop_toBottomOf="@+id/title_text">
 
-        <LinearLayout
-            android:layout_width="250dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="24dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Server Status:"
-                android:textColor="@android:color/white"
-                android:textSize="18sp"
-                android:layout_marginEnd="8dp" />
-
-            <View
-                android:id="@+id/status_indicator"
-                android:layout_width="12dp"
-                android:layout_height="12dp"
-                android:background="@drawable/status_indicator_offline"
-                android:layout_gravity="center_vertical" />
-        </LinearLayout>
-
         <ImageView
             android:id="@+id/qr_code"
-            android:layout_width="250dp"
-            android:layout_height="250dp"
-            android:background="@android:color/white"
-            android:padding="12dp"
-            android:scaleType="centerCrop"
+            android:layout_width="280dp"
+            android:layout_height="280dp"
+            android:scaleType="fitCenter"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp" />
+            android:adjustViewBounds="true" />
 
         <TextView
-            android:id="@+id/url_text"
+            android:id="@+id/timer_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text=""
+            android:text="Time Remaining: 10:00"
             android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:fontFamily="monospace"
-            android:layout_gravity="center_horizontal" />
+            android:textSize="18sp"
+            android:gravity="center"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp" />
 
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/status_text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Waiting for cookie..."
-        android:textColor="@android:color/white"
-        android:textSize="18sp"
-        android:gravity="center"
-        android:layout_marginTop="16dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/right_column" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -20,14 +20,15 @@ public class LogoutRequestTask {
     private Context context;
 
     private static final String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
-    private static final String userAgent = String.format("Hydravion %s (AndroidTV), CFNetwork", version);
+    private static final String userAgent = String.format("Hydravion %s (AndroidTV)", version);
 
     public LogoutRequestTask(Context context) {
         this.context = context;
     }
 
-    public void logout(String cookies, final LogoutRequestTask.VolleyCallback callback) {
-        String uri = "https://www.floatplane.com/api/auth/logout";
+    public void logout(String accessToken, final LogoutRequestTask.VolleyCallback callback) {
+        // Revoke access token via revocation endpoint
+        String uri = "https://auth.floatplane.com/realms/floatplane/protocol/openid-connect/revoke";
         RequestQueue queue = Volley.newRequestQueue(this.context);
         StringRequest stringRequest = new StringRequest(Request.Method.POST, uri,
                 callback::onSuccess, error -> {
@@ -37,9 +38,16 @@ public class LogoutRequestTask {
             @Override
             public Map<String, String> getHeaders() {
                 Map<String, String> params = new HashMap<>();
-                params.put("Cookie", cookies);
                 params.put("Accept", "application/json");
                 params.put("User-Agent", userAgent);
+                return params;
+            }
+
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("client_id", "hydravion");
+                params.put("token", accessToken);
                 return params;
             }
         };

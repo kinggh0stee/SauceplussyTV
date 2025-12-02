@@ -33,6 +33,7 @@ import java.util.HashMap;
 
 import kotlin.Unit;
 import ml.bmlzootown.hydravion.R;
+import ml.bmlzootown.hydravion.authenticate.AuthManager;
 import ml.bmlzootown.hydravion.browse.MainFragment;
 import ml.bmlzootown.hydravion.client.HydravionClient;
 import ml.bmlzootown.hydravion.detail.DetailsActivity;
@@ -237,9 +238,13 @@ public class PlaybackActivity extends FragmentActivity {
         player.seekTo(currentWindow, playbackPosition);
         playerView.setPlayer(player);
         DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-        HashMap<String, String> cookieMap = new HashMap<>();
-        cookieMap.put("Cookie", "sails.sid=" + MainFragment.sailssid + ";");
-        dataSourceFactory.setDefaultRequestProperties(cookieMap);
+        String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
+        AuthManager authManager = AuthManager.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
+        String accessToken = authManager.getAccessToken();
+        HashMap<String, String> headers = new HashMap<>();
+        headers.put("Authorization", "Bearer " + accessToken);
+        headers.put("User-Agent", "Hydravion (AndroidTV " + version + ")");
+        dataSourceFactory.setDefaultRequestProperties(headers);
         int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
         DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
         MediaItem mi = MediaItem.fromUri(url);

@@ -51,7 +51,6 @@ import kotlin.Unit;
 import ml.bmlzootown.hydravion.BuildConfig;
 import ml.bmlzootown.hydravion.Constants;
 import ml.bmlzootown.hydravion.R;
-import ml.bmlzootown.hydravion.authenticate.LoginActivity;
 import ml.bmlzootown.hydravion.authenticate.LogoutRequestTask;
 import ml.bmlzootown.hydravion.card.CardPresenter;
 import ml.bmlzootown.hydravion.client.HydravionClient;
@@ -83,8 +82,6 @@ public class MainFragment extends BrowseSupportFragment {
     private SocketClient socketClient;
     private Socket socket;
     private final Gson gson = new Gson();
-
-    public static String sailssid;
 
     public static List<Subscription> subscriptions = new ArrayList<>();
     private static NavigableMap<Integer, Video> strms = new TreeMap<>();
@@ -142,18 +139,20 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 42 && resultCode == 1 && data != null) {
-            ArrayList<String> cookies = data.getStringArrayListExtra("cookies");
-            for (String cookie : cookies) {
-                // Use split with limit of 2 to handle cookie values that may contain "="
-                String[] c = cookie.split("=", 2);
-                if (c.length == 2 && c[0].equalsIgnoreCase("sails.sid")) {
-                    sailssid = c[1];
-                }
-            }
-            dLog("MainFragment", sailssid);
+        if (requestCode == 42 && resultCode == RESULT_OK && data != null) {
+            String accessToken = data.getStringExtra("access_token");
+            String refreshToken = data.getStringExtra("refresh_token");
+            long expiresIn = data.getLongExtra("expires_in", 3600L);
 
-            saveCredentials();
+            if (accessToken != null && !accessToken.isEmpty()) {
+                long expiresAt = System.currentTimeMillis() + (expiresIn * 1000L);
+                requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
+                        .putString(Constants.PREF_ACCESS_TOKEN, accessToken)
+                        .putString(Constants.PREF_REFRESH_TOKEN, refreshToken)
+                        .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
+                        .commit();
+            }
+
             initialize();
         } else if (requestCode == Constants.REQ_CODE_DETAIL && resultCode == RESULT_OK && data != null) {
             if (data.getBooleanExtra("REFRESH", false)) {
@@ -246,46 +245,59 @@ public class MainFragment extends BrowseSupportFragment {
 
     private boolean loadCredentials() {
         SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
-        sailssid = prefs.getString(Constants.PREF_SAIL_SSID, "default");
-        dLog("SAILS.SID", sailssid);
+        String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
+        long expiresAt = prefs.getLong(Constants.PREF_TOKEN_EXPIRES_AT, 0L);
 
-        if (sailssid.equals("default")) {
-            dLog("LOGIN", "Credentials not found!");
+        if (accessToken == null || accessToken.isEmpty()) {
+            dLog("LOGIN", "Access token not found!");
             return false;
-        } else {
-            dLog("LOGIN", "Credentials found!");
-            return true;
         }
+
+        if (System.currentTimeMillis() >= expiresAt) {
+            dLog("LOGIN", "Access token expired!");
+            return false;
+        }
+
+        dLog("LOGIN", "Access token present and valid.");
+        return true;
     }
 
     private void logout() {
-        // Invalidate cookies via API
-        LogoutRequestTask lrt = new LogoutRequestTask(getContext());
-        String cookies = "sails.sid=" + sailssid + ";";
-        lrt.logout(cookies, new LogoutRequestTask.VolleyCallback() {
-            @Override
-            public void onSuccess(String response) {
-                dLog("LOGOUT", "Success!");
-            }
+        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
+        String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
 
-            @Override
-            public void onError(VolleyError error) {
-                dLog("LOGOUT --> ERROR", error.getMessage());
-            }
-        });
+        // Best-effort token revocation; ignore errors
+        if (accessToken != null && !accessToken.isEmpty()) {
+            LogoutRequestTask lrt = new LogoutRequestTask(getContext());
+            lrt.logout(accessToken, new LogoutRequestTask.VolleyCallback() {
+                @Override
+                public void onSuccess(String response) {
+                    dLog("LOGOUT", "Token revoked");
+                }
 
-        // Removed cookies, save dummy cookies, and close client
-        sailssid = "default";
-        saveCredentials();
-        requireActivity().finishAndRemoveTask();
+                @Override
+                public void onError(VolleyError error) {
+                    dLog("LOGOUT", "Revocation failed: " + error.getMessage());
+                }
+            });
+        }
+
+        // Clear tokens and in-memory data
+        prefs.edit()
+                .remove(Constants.PREF_ACCESS_TOKEN)
+                .remove(Constants.PREF_REFRESH_TOKEN)
+                .remove(Constants.PREF_TOKEN_EXPIRES_AT)
+                .commit();
+
+        subscriptions.clear();
+        videos.clear();
+
+        // Restart the QR login flow instead of closing the app
+        checkLogin();
     }
 
     private void saveCredentials() {
-        // Use commit() instead of apply() to ensure synchronous persistence
-        // This is critical for login credentials that must survive device reboots
-        requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
-                .putString(Constants.PREF_SAIL_SSID, sailssid)
-                .commit();
+        // No-op: credentials are now managed directly when OAuth tokens are received
     }
 
     private void gotLiveInfo(Subscription sub, Delivery live) {
@@ -304,12 +316,14 @@ public class MainFragment extends BrowseSupportFragment {
             if (subscriptions == null) {
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
-                        .setMessage("Re-open Hydravion to login again!")
-                        .setPositiveButton("OK",
+                        .setMessage("Your Floatplane session has expired. Please relink your account.")
+                        .setPositiveButton("Relink",
                                 (dialog, which) -> {
                                     dialog.dismiss();
                                     logout();
                                 })
+                        .setNegativeButton("Cancel",
+                                (dialog, which) -> dialog.dismiss())
                         .create()
                         .show();
             } else {

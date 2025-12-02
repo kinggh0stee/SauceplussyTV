@@ -1,17 +1,13 @@
 package ml.bmlzootown.hydravion.authenticate;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.text.InputType;
-import android.text.format.Formatter;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.StyleSpan;
 import android.util.Log;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -20,26 +16,56 @@ import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
 import com.journeyapps.barcodescanner.BarcodeEncoder;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
-import java.util.ArrayList;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import ml.bmlzootown.hydravion.R;
 import ml.bmlzootown.hydravion.browse.MainFragment;
 
 public class QrLoginActivity extends Activity {
     private static final String TAG = "QrLoginActivity";
-    
-    private LoginServer server;
+    private static final String CLIENT_ID = "hydravion";
+    private static final String SCOPE = "openid videos:watch account:read";
+    private static final String DEVICE_AUTH_ENDPOINT = "https://auth.floatplane.com/realms/floatplane/protocol/openid-connect/auth/device";
+    private static final String TOKEN_ENDPOINT = "https://auth.floatplane.com/realms/floatplane/protocol/openid-connect/token";
+
     private ImageView qrCodeView;
-    private TextView urlTextView;
     private TextView statusTextView;
-    private Button manualEntryButton;
-    private android.view.View statusIndicator;
-    private String localServerUrl;
+    private TextView userCodeDisplay;
+    private TextView instructionsText;
+    private TextView cookieSteps;
+    private TextView timerText;
+    private RequestQueue requestQueue;
+
+    private String deviceCode;
+    private String userCode;
+    private String verificationUri;
+    private String verificationUriComplete;
+    private long expiresAtMs;
+    private long pollIntervalMs = 5000L;
+    private android.os.Handler handler;
+    private final Runnable pollRunnable = new Runnable() {
+        @Override
+        public void run() {
+            pollForToken();
+        }
+    };
+    private final Runnable timerRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updateTimer();
+        }
+    };
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,84 +73,88 @@ public class QrLoginActivity extends Activity {
         setContentView(R.layout.activity_qr_login);
         
         qrCodeView = findViewById(R.id.qr_code);
-        urlTextView = findViewById(R.id.url_text);
         statusTextView = findViewById(R.id.status_text);
-        manualEntryButton = findViewById(R.id.manual_entry_button);
-        statusIndicator = findViewById(R.id.status_indicator);
-        
-        // Initially set to red (offline) until server starts
-        updateServerStatus(false);
-        
-        manualEntryButton.setOnClickListener(v -> showManualEntryDialog());
-        
-        startServerAndShowQR();
+        userCodeDisplay = findViewById(R.id.user_code_display);
+        instructionsText = findViewById(R.id.instructions_text);
+        cookieSteps = findViewById(R.id.cookie_steps);
+        timerText = findViewById(R.id.timer_text);
+        requestQueue = Volley.newRequestQueue(this);
+        handler = new android.os.Handler();
+
+        startDeviceAuthorization();
+    }
+
+    private void startDeviceAuthorization() {
+        statusTextView.setText("Requesting login code...");
+
+        StringRequest request = new StringRequest(
+                Request.Method.POST,
+                DEVICE_AUTH_ENDPOINT,
+                this::handleDeviceAuthResponse,
+                error -> {
+                    Log.e(TAG, "Device authorization error", error);
+                    Toast.makeText(this, "Failed to start device login.", Toast.LENGTH_LONG).show();
+                    finish();
+                }
+        ) {
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("client_id", CLIENT_ID);
+                params.put("scope", SCOPE);
+                return params;
+            }
+        };
+
+        requestQueue.add(request);
     }
     
-    private void startServerAndShowQR() {
+    private void handleDeviceAuthResponse(String response) {
         try {
-            String localIp = getLocalIpAddress();
-            if (localIp == null) {
-                Toast.makeText(this, "Could not determine local IP address. Please check your network connection.", Toast.LENGTH_LONG).show();
-                finish();
-                return;
-            }
+            JSONObject json = new JSONObject(response);
+            deviceCode = json.getString("device_code");
+            userCode = json.getString("user_code");
+            verificationUri = json.getString("verification_uri");
+            verificationUriComplete = json.optString("verification_uri_complete", verificationUri);
+            long expiresIn = json.optLong("expires_in", 600L);
+            long interval = json.optLong("interval", 5L);
+
+            expiresAtMs = System.currentTimeMillis() + expiresIn * 1000L;
+            pollIntervalMs = interval * 1000L;
+
+            // Generate QR code with verification_uri_complete (on-device, no external service)
+            generateQRCode(verificationUriComplete);
+
+            // Display user code in highlighted area
+            userCodeDisplay.setText(userCode);
             
-            // Local server URL for cookie input - QR code points here
-            localServerUrl = "http://" + localIp + ":8765";
+            // Update instructions text with bold floatplane.com/link
+            updateInstructionsWithBoldUrl();
             
-            MainFragment.dLog(TAG, "Starting server for cookie input at: " + localServerUrl);
-            
-            // Start the HTTP server (no Turnstile needed - just cookie input)
-            server = new LoginServer(this);
-            server.setCallback(new LoginServer.LoginCallback() {
-                @Override
-                public void onCookieReceived(String sailsSid) {
-                    runOnUiThread(() -> {
-                        statusTextView.setText("Login successful! Processing...");
-                        handleLoginSuccess(sailsSid);
-                    });
-                }
-                
-                @Override
-                public void onError(String error) {
-                    runOnUiThread(() -> {
-                        statusTextView.setText("Error: " + error);
-                        MainFragment.dLog(TAG, "Login error: " + error);
-                    });
-                }
-            });
-            
-            try {
-                server.start();
-                MainFragment.dLog(TAG, "Server started on port " + server.getPort());
-                // Server started successfully - set indicator to green
-                updateServerStatus(true);
-            } catch (IOException e) {
-                Log.e(TAG, "Failed to start server", e);
-                // Server failed to start - set indicator to red
-                updateServerStatus(false);
-                Toast.makeText(this, "Failed to start login server: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                finish();
-                return;
-            }
-            
-            // Generate QR code pointing to local server
-            generateQRCode(localServerUrl);
-            urlTextView.setText(localServerUrl);
-            statusTextView.setText("Waiting for cookie...");
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Error setting up QR login", e);
-            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            statusTextView.setText("Waiting for you to complete login on another device...");
+
+            // Start timer countdown
+            handler.post(timerRunnable);
+
+            // Start polling token endpoint
+            handler.postDelayed(pollRunnable, pollIntervalMs);
+        } catch (JSONException e) {
+            Log.e(TAG, "Failed to parse device auth response", e);
+            Toast.makeText(this, "Invalid response from login server.", Toast.LENGTH_LONG).show();
             finish();
         }
     }
-    
+
     private void generateQRCode(String url) {
         try {
+            // Generate QR code on-device using local library (no external service)
             BarcodeEncoder barcodeEncoder = new BarcodeEncoder();
-            // Generate larger bitmap for better quality, then scale down
-            Bitmap bitmap = barcodeEncoder.encodeBitmap(url, BarcodeFormat.QR_CODE, 500, 500);
+            // Generate bitmap - use size that matches view (280dp = ~840px at 3x density)
+            Bitmap bitmap = barcodeEncoder.encodeBitmap(url, BarcodeFormat.QR_CODE, 840, 840);
+            
+            // Crop white borders to remove quiet zone padding
+            bitmap = cropWhiteBorders(bitmap);
+            
             qrCodeView.setImageBitmap(bitmap);
         } catch (WriterException e) {
             Log.e(TAG, "Error generating QR code", e);
@@ -132,94 +162,223 @@ public class QrLoginActivity extends Activity {
         }
     }
     
-    private void showManualEntryDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Manual Cookie Entry");
+    private Bitmap cropWhiteBorders(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
         
-        final EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setHint("Paste sails.sid cookie value here");
-        input.setPadding(50, 20, 50, 20);
-        builder.setView(input);
-        
-        builder.setPositiveButton("Submit", (dialog, which) -> {
-            String cookieValue = input.getText().toString().trim();
-            if (!cookieValue.isEmpty()) {
-                // Ensure it has the full cookie format
-                String sailsSid = cookieValue.startsWith("sails.sid=") ? cookieValue : "sails.sid=" + cookieValue;
-                handleLoginSuccess(sailsSid);
-            } else {
-                Toast.makeText(this, "Please enter a cookie value", Toast.LENGTH_SHORT).show();
+        // Find top border
+        int top = 0;
+        for (int y = 0; y < height; y++) {
+            boolean hasNonWhite = false;
+            for (int x = 0; x < width; x++) {
+                int pixel = bitmap.getPixel(x, y);
+                if ((pixel & 0x00FFFFFF) != 0x00FFFFFF) { // Not white
+                    hasNonWhite = true;
+                    break;
+                }
             }
-        });
+            if (hasNonWhite) {
+                top = y;
+                break;
+            }
+        }
         
-        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.cancel());
+        // Find bottom border
+        int bottom = height - 1;
+        for (int y = height - 1; y >= 0; y--) {
+            boolean hasNonWhite = false;
+            for (int x = 0; x < width; x++) {
+                int pixel = bitmap.getPixel(x, y);
+                if ((pixel & 0x00FFFFFF) != 0x00FFFFFF) { // Not white
+                    hasNonWhite = true;
+                    break;
+                }
+            }
+            if (hasNonWhite) {
+                bottom = y;
+                break;
+            }
+        }
         
-        builder.show();
+        // Find left border
+        int left = 0;
+        for (int x = 0; x < width; x++) {
+            boolean hasNonWhite = false;
+            for (int y = top; y <= bottom; y++) {
+                int pixel = bitmap.getPixel(x, y);
+                if ((pixel & 0x00FFFFFF) != 0x00FFFFFF) { // Not white
+                    hasNonWhite = true;
+                    break;
+                }
+            }
+            if (hasNonWhite) {
+                left = x;
+                break;
+            }
+        }
+        
+        // Find right border
+        int right = width - 1;
+        for (int x = width - 1; x >= 0; x--) {
+            boolean hasNonWhite = false;
+            for (int y = top; y <= bottom; y++) {
+                int pixel = bitmap.getPixel(x, y);
+                if ((pixel & 0x00FFFFFF) != 0x00FFFFFF) { // Not white
+                    hasNonWhite = true;
+                    break;
+                }
+            }
+            if (hasNonWhite) {
+                right = x;
+                break;
+            }
+        }
+        
+        // Crop to actual QR code bounds
+        if (left < right && top < bottom) {
+            return Bitmap.createBitmap(bitmap, left, top, right - left + 1, bottom - top + 1);
+        }
+        
+        return bitmap;
     }
     
-    private String getLocalIpAddress() {
+    private void updateTimer() {
+        if (expiresAtMs == 0) {
+            return;
+        }
+        
+        long remainingMs = expiresAtMs - System.currentTimeMillis();
+        
+        if (remainingMs <= 0) {
+            // Timer expired, refresh the QR code and user code
+            timerText.setText("Time Remaining: 0:00");
+            statusTextView.setText("Login code expired. Refreshing...");
+            handler.removeCallbacks(pollRunnable);
+            handler.removeCallbacks(timerRunnable);
+            startDeviceAuthorization();
+            return;
+        }
+        
+        long remainingSeconds = remainingMs / 1000L;
+        long minutes = remainingSeconds / 60L;
+        long seconds = remainingSeconds % 60L;
+        
+        String timerString = String.format("Time Remaining: %d:%02d", minutes, seconds);
+        timerText.setText(timerString);
+        
+        // Update timer every second
+        handler.postDelayed(timerRunnable, 1000L);
+    }
+    
+    private void updateInstructionsWithBoldUrl() {
+        // Bold "floatplane.com/link" in instructions text
+        String instructions = instructionsText.getText().toString();
+        SpannableString spannable = new SpannableString(instructions);
+        int start = instructions.indexOf("floatplane.com/link");
+        if (start >= 0) {
+            int end = start + "floatplane.com/link".length();
+            spannable.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        instructionsText.setText(spannable);
+        
+        // Bold "floatplane.com/link" in steps text
+        String steps = cookieSteps.getText().toString();
+        SpannableString stepsSpannable = new SpannableString(steps);
+        int stepsStart = steps.indexOf("floatplane.com/link");
+        if (stepsStart >= 0) {
+            int stepsEnd = stepsStart + "floatplane.com/link".length();
+            stepsSpannable.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), stepsStart, stepsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        cookieSteps.setText(stepsSpannable);
+    }
+    
+    private void pollForToken() {
+        if (deviceCode == null) {
+            return;
+        }
+
+        if (System.currentTimeMillis() >= expiresAtMs) {
+            // Timer will handle the refresh automatically
+            return;
+        }
+
+        StringRequest request = new StringRequest(
+                Request.Method.POST,
+                TOKEN_ENDPOINT,
+                this::handleTokenResponse,
+                error -> {
+                    Log.e(TAG, "Token polling error", error);
+                    // Keep polling on transient errors
+                    handler.postDelayed(pollRunnable, pollIntervalMs);
+                }
+        ) {
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("grant_type", "urn:ietf:params:oauth:grant-type:device_code");
+                params.put("client_id", CLIENT_ID);
+                params.put("device_code", deviceCode);
+                return params;
+            }
+        };
+
+        requestQueue.add(request);
+    }
+
+    private void handleTokenResponse(String response) {
         try {
-            // Try WiFi first
-            WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wifiManager != null) {
-                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-                int ipAddress = wifiInfo.getIpAddress();
-                if (ipAddress != 0) {
-                    return Formatter.formatIpAddress(ipAddress);
+            JSONObject json = new JSONObject(response);
+            if (json.has("error")) {
+                String error = json.getString("error");
+                if ("authorization_pending".equals(error)) {
+                    // keep polling
+                    handler.postDelayed(pollRunnable, pollIntervalMs);
+                    return;
+                } else if ("slow_down".equals(error)) {
+                    pollIntervalMs += 2000L;
+                    handler.postDelayed(pollRunnable, pollIntervalMs);
+                    return;
+                } else if ("expired_token".equals(error)) {
+                    statusTextView.setText("Login code expired. Please try again.");
+                    return;
+                } else {
+                    statusTextView.setText("Login failed: " + error);
+                    return;
                 }
             }
-            
-            // Fallback: enumerate network interfaces
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface networkInterface = interfaces.nextElement();
-                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
-                while (addresses.hasMoreElements()) {
-                    InetAddress address = addresses.nextElement();
-                    if (!address.isLoopbackAddress() && address.getHostAddress().indexOf(':') < 0) {
-                        return address.getHostAddress();
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            Log.e(TAG, "Error getting local IP", e);
+
+            String accessToken = json.getString("access_token");
+            String refreshToken = json.optString("refresh_token", "");
+            long expiresIn = json.optLong("expires_in", 3600L);
+
+            handleLoginSuccess(accessToken, refreshToken, expiresIn);
+        } catch (JSONException e) {
+            Log.e(TAG, "Failed to parse token response", e);
+            statusTextView.setText("Failed to complete login.");
         }
-        return null;
     }
-    
-    private void handleLoginSuccess(String sailsSid) {
-        // Stop the server
-        if (server != null) {
-            server.stop();
-            updateServerStatus(false);
+
+    private void handleLoginSuccess(String accessToken, String refreshToken, long expiresInSeconds) {
+        // Stop all handlers before finishing
+        if (handler != null) {
+            handler.removeCallbacks(pollRunnable);
+            handler.removeCallbacks(timerRunnable);
         }
-        
-        // Process the cookie similar to the old login flow
-        ArrayList<String> cookies = new ArrayList<>();
-        cookies.add(sailsSid);
         
         Intent intent = new Intent();
-        intent.putStringArrayListExtra("cookies", cookies);
-        setResult(1, intent);
+        intent.putExtra("access_token", accessToken);
+        intent.putExtra("refresh_token", refreshToken);
+        intent.putExtra("expires_in", expiresInSeconds);
+        setResult(RESULT_OK, intent);
         finish();
-    }
-    
-    private void updateServerStatus(boolean isRunning) {
-        if (statusIndicator != null) {
-            int drawableRes = isRunning 
-                ? R.drawable.status_indicator_online 
-                : R.drawable.status_indicator_offline;
-            statusIndicator.setBackgroundResource(drawableRes);
-        }
     }
     
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (server != null) {
-            server.stop();
-            updateServerStatus(false);
+        if (handler != null) {
+            handler.removeCallbacks(pollRunnable);
+            handler.removeCallbacks(timerRunnable);
         }
     }
 }

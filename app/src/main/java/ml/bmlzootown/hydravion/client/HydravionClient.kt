@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import ml.bmlzootown.hydravion.BuildConfig
 import ml.bmlzootown.hydravion.Constants
 import ml.bmlzootown.hydravion.browse.MainFragment
+import ml.bmlzootown.hydravion.authenticate.AuthManager
 import ml.bmlzootown.hydravion.creator.Creator
 import ml.bmlzootown.hydravion.creator.FloatplaneLiveStream
 import ml.bmlzootown.hydravion.github.Release
@@ -23,16 +24,11 @@ class HydravionClient private constructor(private val context: Context, private 
     private val creatorIds: MutableMap<String, String> = hashMapOf()
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
     private val requestTask: RequestTask = RequestTask(context)
-
-    /**
-     * Convenience fun to get cookies string
-     * @return Cookies string
-     */
-    private fun getCookiesString(): String =
-        "${Constants.PREF_SAIL_SSID}=${mainPrefs.getString(Constants.PREF_SAIL_SSID, "")}"
+    private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
 
     fun getSubs(callback: (Array<Subscription>?) -> Unit) {
-        requestTask.sendRequest(URI_SUBSCRIPTIONS, getCookiesString(), object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(URI_SUBSCRIPTIONS, token, object : RequestTask.VolleyCallback {
 
             override fun onResponseCode(response: Int) {
                 //Ignore
@@ -70,13 +66,17 @@ class HydravionClient private constructor(private val context: Context, private 
 
             override fun onError(error: VolleyError) = callback(null)
         })
+        }, {
+            callback(null)
+        })
     }
 
     fun getCreatorInfo(creatorGUID: String, callback: (FloatplaneLiveStream) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_CREATOR_INFO?id=$creatorGUID",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_CREATOR_INFO?id=$creatorGUID",
+                token,
+                object : RequestTask.VolleyCallback {
                 override fun onSuccess(response: String) {
                     if (BuildConfig.DEBUG) {
                         MainFragment.dLog(TAG,"getCreatorInfo: $response")
@@ -98,14 +98,18 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op on failure
+        })
     }
 
     fun getVideos(creatorGUID: String, page: Int, callback: (Array<Video>) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_VIDEOS?id=$creatorGUID&fetchAfter=${(page - 1) * 20}",
-            getCookiesString(),
-            creatorGUID,
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_VIDEOS?id=$creatorGUID&fetchAfter=${(page - 1) * 20}",
+                token,
+                creatorGUID,
+                object : RequestTask.VolleyCallback {
 
                 override fun onResponseCode(response: Int) = Unit
 
@@ -121,14 +125,18 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            callback(emptyArray())
+        })
     }
 
     fun getVideo(video: Video, res: String, callback: (Video) -> Unit) {
         //val y = Util.getCurrentDisplayModeSize(context).y;
-        requestTask.sendRequest(
-            "$URI_DELIVERY?scenario=onDemand&entityId=${video.getVideoId()}",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_DELIVERY?scenario=onDemand&entityId=${video.getVideoId()}",
+                token,
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     if (BuildConfig.DEBUG) {
@@ -173,14 +181,18 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
 
     fun getVideoObject(id: String, callback: (Video) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_POST?id=$id",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_POST?id=$id",
+                token,
+                object : RequestTask.VolleyCallback {
                 override fun onSuccess(response: String) {
                     try {
                         callback(Gson().fromJson(response, Video::class.java))
@@ -195,13 +207,17 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
     fun getVideoInfo(videoID: String, callback: (VideoInfo) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_VIDEO_INFO?id=$videoID",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_VIDEO_INFO?id=$videoID",
+                token,
+                object : RequestTask.VolleyCallback {
 
 
                 override fun onSuccess(response: String) {
@@ -218,13 +234,17 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
     fun getLive(sub: Subscription, callback: (Delivery) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_CREATOR?id=${sub.creator}",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_CREATOR?id=${sub.creator}",
+                token,
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     val c: Creator = Gson().fromJson(response, Creator::class.java)
@@ -242,13 +262,17 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
     fun getLive(livestreamID: String, callback: (Delivery) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_DELIVERY?scenario=live&entityId=$livestreamID",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_DELIVERY?scenario=live&entityId=$livestreamID",
+                token,
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     callback(Gson().fromJson(response, Delivery::class.java))
@@ -260,6 +284,9 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
     /*fun getLive(creatorGUID: String, callback: (Live) -> Unit) {
@@ -314,10 +341,11 @@ class HydravionClient private constructor(private val context: Context, private 
             return
         }
 
-        requestTask.sendRequest(
-            "$URI_CREATOR_INFO?id=$creatorGUID",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_CREATOR_INFO?id=$creatorGUID",
+                token,
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     try {
@@ -337,13 +365,17 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            // no-op
+        })
     }
 
     fun getPost(postId: String, callback: (Post) -> Unit) {
-        requestTask.sendRequest(
-            "$URI_POST?id=$postId",
-            getCookiesString(),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendRequest(
+                "$URI_POST?id=$postId",
+                token,
+                object : RequestTask.VolleyCallback {
 
 
                 override fun onSuccess(response: String) {
@@ -359,7 +391,10 @@ class HydravionClient private constructor(private val context: Context, private 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
                 override fun onError(error: VolleyError) = Unit
-            });
+            })
+        }, {
+            // no-op
+        })
     }
 
     fun getLatest(callback: (String) -> Unit) {
@@ -383,11 +418,12 @@ class HydravionClient private constructor(private val context: Context, private 
     }
 
     fun toggleLikePost(postId: String, callback: (Boolean) -> Unit) {
-        requestTask.sendData(
-            URI_LIKE,
-            getCookiesString(),
-            mapOf("id" to postId, "contentType" to "blogPost"),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendData(
+                URI_LIKE,
+                token,
+                mapOf("id" to postId, "contentType" to "blogPost"),
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     callback(response.contains("like"))
@@ -399,14 +435,18 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            callback(false)
+        })
     }
 
     fun toggleDislikePost(postId: String, callback: (Boolean) -> Unit) {
-        requestTask.sendData(
-            URI_DISLIKE,
-            getCookiesString(),
-            mapOf("id" to postId, "contentType" to "blogPost"),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendData(
+                URI_DISLIKE,
+                token,
+                mapOf("id" to postId, "contentType" to "blogPost"),
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     callback(response.contains("dislike"))
@@ -418,6 +458,9 @@ class HydravionClient private constructor(private val context: Context, private 
 
                 override fun onError(error: VolleyError) = Unit
             })
+        }, {
+            callback(false)
+        })
     }
 
     fun getVideoProgress(blogPostIds: List<String>, callback: (List<VideoProgress>) -> Unit) {
@@ -427,11 +470,12 @@ class HydravionClient private constructor(private val context: Context, private 
             json.put("contentType", "blogPost")
             json
         }.toString()
-        requestTask.sendDataWithBody(
-            URI_GET_PROGRESS,
-            getCookiesString(),
-            body,
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendDataWithBody(
+                URI_GET_PROGRESS,
+                token,
+                body,
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
                     try {
@@ -450,16 +494,19 @@ class HydravionClient private constructor(private val context: Context, private 
                 override fun onError(error: VolleyError) {
                     callback(ArrayList())
                 }
-            }
-        )
+            })
+        }, {
+            callback(ArrayList())
+        })
     }
 
     fun setVideoProgress(videoId: String, progressInPercent: Int) {
-        requestTask.sendData(
-            URI_UPDATE_PROGRESS,
-            getCookiesString(),
-            mapOf("id" to videoId, "contentType" to "video", "progress" to progressInPercent.toString()),
-            object : RequestTask.VolleyCallback {
+        authManager.withValidAccessToken({ token ->
+            requestTask.sendData(
+                URI_UPDATE_PROGRESS,
+                token,
+                mapOf("id" to videoId, "contentType" to "video", "progress" to progressInPercent.toString()),
+                object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) = Unit
 
@@ -468,8 +515,10 @@ class HydravionClient private constructor(private val context: Context, private 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
                 override fun onError(error: VolleyError) = Unit
-            }
-        )
+            })
+        }, {
+            // ignore
+        })
     }
 
     companion object {
