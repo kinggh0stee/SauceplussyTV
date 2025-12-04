@@ -51,6 +51,7 @@ import kotlin.Unit;
 import ml.bmlzootown.hydravion.BuildConfig;
 import ml.bmlzootown.hydravion.Constants;
 import ml.bmlzootown.hydravion.R;
+import ml.bmlzootown.hydravion.authenticate.AuthManager;
 import ml.bmlzootown.hydravion.authenticate.LogoutRequestTask;
 import ml.bmlzootown.hydravion.card.CardPresenter;
 import ml.bmlzootown.hydravion.client.HydravionClient;
@@ -125,14 +126,18 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void checkLogin() {
-        boolean gotCookies = loadCredentials();
-        if (!gotCookies) {
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+        authManager.withValidAccessToken(accessToken -> {
+            dLog("LOGIN", "Access token valid (or refreshed successfully)");
+            initialize();
+            return Unit.INSTANCE;
+        }, () -> {
+            dLog("LOGIN", "No valid access token or refresh token available. Starting login flow.");
             Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.QrLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
             startActivityForResult(intent, 42);
-        } else {
-            initialize();
-        }
+            return Unit.INSTANCE;
+        });
     }
 
 
@@ -257,25 +262,6 @@ public class MainFragment extends BrowseSupportFragment {
         dLog("SOCKET --> SYNCEVENT", event.toString());
     };
 
-    private boolean loadCredentials() {
-        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
-        String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
-        long expiresAt = prefs.getLong(Constants.PREF_TOKEN_EXPIRES_AT, 0L);
-
-        if (accessToken == null || accessToken.isEmpty()) {
-            dLog("LOGIN", "Access token not found!");
-            return false;
-        }
-
-        if (System.currentTimeMillis() >= expiresAt) {
-            dLog("LOGIN", "Access token expired!");
-            return false;
-        }
-
-        dLog("LOGIN", "Access token present and valid.");
-        return true;
-    }
-
     private void logout() {
         SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
         String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
@@ -308,10 +294,6 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Restart the QR login flow instead of closing the app
         checkLogin();
-    }
-
-    private void saveCredentials() {
-        // No-op: credentials are now managed directly when OAuth tokens are received
     }
 
     private void gotLiveInfo(Subscription sub, Delivery live) {
