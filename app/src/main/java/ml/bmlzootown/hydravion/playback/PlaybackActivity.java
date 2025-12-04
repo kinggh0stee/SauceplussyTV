@@ -104,7 +104,10 @@ public class PlaybackActivity extends FragmentActivity {
         super.onStart();
 
         if (Util.SDK_INT > 23) {
-            initializePlayer();
+            // Only initialize if not already initialized or in progress
+            if (!playerInitialized && !initializationInProgress && player == null) {
+                initializePlayer();
+            }
         }
     }
 
@@ -113,7 +116,10 @@ public class PlaybackActivity extends FragmentActivity {
         super.onResume();
 
         if (Util.SDK_INT <= 23 || player == null) {
-            initializePlayer();
+            // Only initialize if not already initialized or in progress
+            if (!playerInitialized && !initializationInProgress) {
+                initializePlayer();
+            }
         }
     }
 
