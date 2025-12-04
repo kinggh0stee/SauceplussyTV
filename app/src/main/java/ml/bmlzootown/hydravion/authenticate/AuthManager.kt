@@ -9,6 +9,7 @@ import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import ml.bmlzootown.hydravion.Constants
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentLinkedQueue
 
  // Centralized helper for managing OAuth tokens and automatic access-token refresh.
 class AuthManager private constructor(
@@ -18,6 +19,17 @@ class AuthManager private constructor(
 
     private val queue: RequestQueue = Volley.newRequestQueue(context.applicationContext)
     private val TAG = "AuthManager"
+    
+    // Cache for validated token to avoid re-validation on every request
+    @Volatile
+    private var cachedToken: String? = null
+    @Volatile
+    private var cacheValidUntil: Long = 0
+    
+    // Queue for concurrent token validation requests
+    private val pendingCallbacks = ConcurrentLinkedQueue<Pair<(String) -> Unit, (() -> Unit)?>>()
+    @Volatile
+    private var isRefreshing = false
 
     private val tokenEndpoint =
         "https://auth.floatplane.com/realms/floatplane/protocol/openid-connect/token"
@@ -38,6 +50,9 @@ class AuthManager private constructor(
             .remove(Constants.PREF_REFRESH_TOKEN)
             .remove(Constants.PREF_TOKEN_EXPIRES_AT)
             .commit()
+        // Clear cache when tokens are cleared
+        cachedToken = null
+        cacheValidUntil = 0
     }
 
     private fun isAccessTokenValid(): Boolean {
@@ -61,22 +76,58 @@ class AuthManager private constructor(
      // Ensures a valid access token, refreshing with the refresh token when necessary.
      // - On success: invokes [onToken] with a non-empty access token.
      // - On failure: clears stored tokens and invokes [onFailure].
+     // - Batches concurrent requests to avoid multiple simultaneous refresh attempts.
     fun withValidAccessToken(
         onToken: (String) -> Unit,
         onFailure: (() -> Unit)? = null
     ) {
+        // Check cache first (valid for 30 seconds to reduce validation overhead)
+        val now = System.currentTimeMillis()
+        if (cachedToken != null && now < cacheValidUntil) {
+            Log.d(TAG, "Using cached valid token")
+            onToken(cachedToken!!)
+            return
+        }
+        
+        // Check if token is valid in storage
         if (isAccessTokenValid()) {
-            Log.d(TAG, "Access token is valid, using existing token")
-            onToken(getAccessToken())
+            val token = getAccessToken()
+            // Cache the token for 30 seconds
+            cachedToken = token
+            cacheValidUntil = now + 30_000L
+            Log.d(TAG, "Access token is valid, using existing token (cached for 30s)")
+            onToken(token)
             return
         }
 
+        // If already refreshing, queue this callback to be notified when refresh completes
+        if (isRefreshing) {
+            Log.d(TAG, "Token refresh in progress, queuing callback")
+            pendingCallbacks.add(Pair(onToken, onFailure))
+            return
+        }
+
+        // Start refresh process
+        isRefreshing = true
         Log.d(TAG, "Access token expired or invalid, attempting refresh")
         val refreshToken = getRefreshToken()
         if (refreshToken.isEmpty()) {
             Log.w(TAG, "Refresh token is empty, cannot refresh. Clearing tokens.")
             clearTokens()
+            
+            // Notify all pending callbacks before returning
+            val callbacks = mutableListOf<Pair<(String) -> Unit, (() -> Unit)?>>()
+            while (pendingCallbacks.isNotEmpty()) {
+                pendingCallbacks.poll()?.let { callbacks.add(it) }
+            }
+            isRefreshing = false
+            
+            // Notify current caller
             onFailure?.invoke()
+            // Notify all queued callbacks
+            callbacks.forEach { (_, failureCallback) ->
+                failureCallback?.invoke()
+            }
             return
         }
 
@@ -105,22 +156,60 @@ class AuthManager private constructor(
                             .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
                             .commit()
 
+                        // Cache the new token
+                        cachedToken = newAccessToken
+                        cacheValidUntil = System.currentTimeMillis() + 30_000L
+                        
+                        // Notify all pending callbacks
+                        val callbacks = mutableListOf<Pair<(String) -> Unit, (() -> Unit)?>>()
+                        while (pendingCallbacks.isNotEmpty()) {
+                            pendingCallbacks.poll()?.let { callbacks.add(it) }
+                        }
+                        isRefreshing = false
+                        
                         onToken(newAccessToken)
+                        callbacks.forEach { (tokenCallback, _) ->
+                            tokenCallback(newAccessToken)
+                        }
                     } else {
                         Log.e(TAG, "Token refresh response missing access_token")
                         clearTokens()
+                        val callbacks = mutableListOf<Pair<(String) -> Unit, (() -> Unit)?>>()
+                        while (pendingCallbacks.isNotEmpty()) {
+                            pendingCallbacks.poll()?.let { callbacks.add(it) }
+                        }
+                        isRefreshing = false
                         onFailure?.invoke()
+                        callbacks.forEach { (_, failureCallback) ->
+                            failureCallback?.invoke()
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Exception parsing token refresh response", e)
                     clearTokens()
+                    val callbacks = mutableListOf<Pair<(String) -> Unit, (() -> Unit)?>>()
+                    while (pendingCallbacks.isNotEmpty()) {
+                        pendingCallbacks.poll()?.let { callbacks.add(it) }
+                    }
+                    isRefreshing = false
                     onFailure?.invoke()
+                    callbacks.forEach { (_, failureCallback) ->
+                        failureCallback?.invoke()
+                    }
                 }
             },
             { error ->
                 Log.e(TAG, "Token refresh request failed: ${error.message}")
                 clearTokens()
+                val callbacks = mutableListOf<Pair<(String) -> Unit, (() -> Unit)?>>()
+                while (pendingCallbacks.isNotEmpty()) {
+                    pendingCallbacks.poll()?.let { callbacks.add(it) }
+                }
+                isRefreshing = false
                 onFailure?.invoke()
+                callbacks.forEach { (_, failureCallback) ->
+                    failureCallback?.invoke()
+                }
             }
         ) {
             override fun getParams(): MutableMap<String, String> =
