@@ -100,6 +100,7 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean backgroundManagerPrepared = false;
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
+    private boolean adapterInitialized = false;
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -330,6 +331,9 @@ public class MainFragment extends BrowseSupportFragment {
             setAdapter(null);
         }
         
+        // Reset adapter initialization flag
+        adapterInitialized = false;
+        
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
 
@@ -445,18 +449,33 @@ public class MainFragment extends BrowseSupportFragment {
             return;
         }
         
+        boolean isPagination = adapterInitialized && videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0;
+        int previousSize = (videos.get(creatorGUID) != null) ? videos.get(creatorGUID).size() : 0;
+        
         if (videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0) {
             videos.get(creatorGUID).addAll(Arrays.asList(vids));
         } else {
             videos.put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
         }
 
-        if (subCount > 1) {
-            subCount--;
+        if (isPagination) {
+            // For pagination, append videos immediately for this creator without waiting for others
+            appendVideosToRows(creatorGUID, previousSize);
+            // Still track subCount for coordination, but don't block on it
+            if (subCount > 1) {
+                subCount--;
+            } else {
+                subCount = subscriptions.size();
+            }
         } else {
-            refreshVideoProgress();
-            subCount = subscriptions.size();
-            setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+            // Initial load - wait for all subscriptions to finish, then do full refresh
+            if (subCount > 1) {
+                subCount--;
+            } else {
+                refreshVideoProgress();
+                subCount = subscriptions.size();
+                setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+            }
         }
     }
 
@@ -562,6 +581,7 @@ public class MainFragment extends BrowseSupportFragment {
         rowsAdapter.add(new ListRow(gridHeader, gridRowAdapter));
 
         setAdapter(rowsAdapter);
+        adapterInitialized = true;
     }
 
     private void addLiveToRow(Integer row, Video stream, List<Subscription> subs) {
@@ -608,6 +628,63 @@ public class MainFragment extends BrowseSupportFragment {
             }
         };
         liveHandler.post(runnable);
+    }
+
+    private void appendVideosToRows(String creatorGUID, int previousSize) {
+        // Guard against appending if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video append - user is logged out");
+            return;
+        }
+        
+        ArrayObjectAdapter rowsAdapter = (ArrayObjectAdapter) getAdapter();
+        if (rowsAdapter == null) {
+            dLog(TAG, "Adapter not initialized, falling back to full refresh");
+            refreshVideoProgress();
+            return;
+        }
+        
+        int rowIndex = getRow(creatorGUID, subscriptions);
+        if (rowIndex == -1 || rowIndex >= rowsAdapter.size()) {
+            dLog(TAG, "Invalid row index for creator: " + creatorGUID);
+            return;
+        }
+        
+        ListRow listRow = (ListRow) rowsAdapter.get(rowIndex);
+        if (listRow == null) {
+            dLog(TAG, "ListRow is null for row index: " + rowIndex);
+            return;
+        }
+        
+        ArrayObjectAdapter listRowAdapter = (ArrayObjectAdapter) listRow.getAdapter();
+        if (listRowAdapter == null) {
+            dLog(TAG, "ListRow adapter is null for row index: " + rowIndex);
+            return;
+        }
+        
+        List<Video> vids = videos.get(creatorGUID);
+        if (vids == null || vids.size() <= previousSize) {
+            dLog(TAG, "No new videos to append for creator: " + creatorGUID);
+            return;
+        }
+        
+        // Get new videos that were added
+        List<Video> newVideos = vids.subList(previousSize, vids.size());
+        
+        // Store the insertion position before adding items
+        int insertPosition = listRowAdapter.size();
+        
+        // Add new videos to the adapter (add() automatically notifies, but we'll be explicit for the range)
+        for (Video video : newVideos) {
+            listRowAdapter.add(video);
+        }
+        
+        // Notify adapter of the new items for smooth insertion without full refresh
+        // Using notifyArrayItemRangeChanged to match existing code pattern
+        listRowAdapter.notifyArrayItemRangeChanged(insertPosition, newVideos.size());
+        
+        // Selection position should be automatically preserved since we're not calling setAdapter()
+        dLog(TAG, "Appended " + newVideos.size() + " videos to row " + rowIndex + " starting at position " + insertPosition);
     }
 
     private void addToRow(Video video, List<Subscription> subs) {
@@ -757,6 +834,7 @@ public class MainFragment extends BrowseSupportFragment {
         switch (action) {
             case REFRESH:
                 videos.clear();
+                adapterInitialized = false; // Reset flag on manual refresh
                 refreshSubscriptions(); // Refresh will get subs and videos again, then refresh row UI
                 break;
             case LOGOUT:
