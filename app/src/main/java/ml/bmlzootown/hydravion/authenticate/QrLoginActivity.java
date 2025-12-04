@@ -150,12 +150,17 @@ public class QrLoginActivity extends Activity {
             // Generate QR code on-device using local library (no external service)
             BarcodeEncoder barcodeEncoder = new BarcodeEncoder();
             // Generate bitmap - use size that matches view (280dp = ~840px at 3x density)
-            Bitmap bitmap = barcodeEncoder.encodeBitmap(url, BarcodeFormat.QR_CODE, 840, 840);
+            Bitmap originalBitmap = barcodeEncoder.encodeBitmap(url, BarcodeFormat.QR_CODE, 840, 840);
             
             // Crop white borders to remove quiet zone padding
-            bitmap = cropWhiteBorders(bitmap);
+            Bitmap croppedBitmap = cropWhiteBorders(originalBitmap);
             
-            qrCodeView.setImageBitmap(bitmap);
+            // Recycle the original large bitmap if a new cropped bitmap was created
+            if (croppedBitmap != originalBitmap && !originalBitmap.isRecycled()) {
+                originalBitmap.recycle();
+            }
+            
+            qrCodeView.setImageBitmap(croppedBitmap);
         } catch (WriterException e) {
             Log.e(TAG, "Error generating QR code", e);
             Toast.makeText(this, "Failed to generate QR code", Toast.LENGTH_SHORT).show();
