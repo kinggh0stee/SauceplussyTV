@@ -297,11 +297,9 @@ public class MainFragment extends BrowseSupportFragment {
         }
 
         // Clear tokens and in-memory data
-        prefs.edit()
-                .remove(Constants.PREF_ACCESS_TOKEN)
-                .remove(Constants.PREF_REFRESH_TOKEN)
-                .remove(Constants.PREF_TOKEN_EXPIRES_AT)
-                .commit();
+        // Use AuthManager to clear both SharedPreferences and in-memory cache
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), prefs);
+        authManager.clearTokens();
 
         // Clear all in-memory data structures
         subscriptions.clear();
@@ -333,6 +331,9 @@ public class MainFragment extends BrowseSupportFragment {
         
         // Reset adapter initialization flag
         adapterInitialized = false;
+        
+        // Reset UI initialization flag to allow proper setup on next login
+        uiInitialized = false;
         
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
