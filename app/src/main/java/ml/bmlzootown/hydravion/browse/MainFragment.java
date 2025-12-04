@@ -97,6 +97,9 @@ public class MainFragment extends BrowseSupportFragment {
 
     private final Handler liveHandler = new Handler(Looper.getMainLooper());
     private int liveIndex = -1;
+    private boolean backgroundManagerPrepared = false;
+    private boolean uiInitialized = false;
+    private boolean isLoggedIn = false;
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -129,10 +132,12 @@ public class MainFragment extends BrowseSupportFragment {
         AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
         authManager.withValidAccessToken(accessToken -> {
             dLog("LOGIN", "Access token valid (or refreshed successfully)");
+            isLoggedIn = true;
             initialize();
             return Unit.INSTANCE;
         }, () -> {
             dLog("LOGIN", "No valid access token or refresh token available. Starting login flow.");
+            isLoggedIn = false;
             Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.QrLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
             startActivityForResult(intent, 42);
@@ -151,13 +156,16 @@ public class MainFragment extends BrowseSupportFragment {
 
             if (accessToken != null && !accessToken.isEmpty()) {
                 long expiresAt = System.currentTimeMillis() + (expiresIn * 1000L);
+                // Use empty string if refreshToken is null to avoid NullPointerException
+                String safeRefreshToken = (refreshToken != null) ? refreshToken : "";
                 requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
                         .putString(Constants.PREF_ACCESS_TOKEN, accessToken)
-                        .putString(Constants.PREF_REFRESH_TOKEN, refreshToken)
+                        .putString(Constants.PREF_REFRESH_TOKEN, safeRefreshToken)
                         .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
                         .commit();
 
-                // Only initialize once we have successfully stored valid credentials
+                // Mark as logged in and initialize
+                isLoggedIn = true;
                 initialize();
             } else {
                 dLog(TAG, "Login result missing access token; restarting login flow.");
@@ -174,8 +182,13 @@ public class MainFragment extends BrowseSupportFragment {
     private void initialize() {
         refreshSubscriptions();
         prepareBackgroundManager();
-        setupUIElements();
-        setupEventListeners();
+        
+        // Only setup UI elements and listeners once, before views are created
+        if (!uiInitialized) {
+            setupUIElements();
+            setupEventListeners();
+            uiInitialized = true;
+        }
         // TODO: Temporarily disabled - backend doesn't support auth tokens with websockets yet
         // Setup Socket
         // setupSocket();
@@ -289,17 +302,56 @@ public class MainFragment extends BrowseSupportFragment {
                 .remove(Constants.PREF_TOKEN_EXPIRES_AT)
                 .commit();
 
+        // Clear all in-memory data structures
         subscriptions.clear();
         videos.clear();
+        strms.clear();
+        videoProgress.clear();
+        
+        // Reset state variables
+        subCount = 0;
+        page = 1;
+        rowSelected = 0;
+        colSelected = 0;
+        liveIndex = -1;
+        
+        // Remove any pending live handler callbacks to prevent accessing cleared data
+        liveHandler.removeCallbacksAndMessages(null);
+        
+        // Disconnect socket if connected
+        if (socket != null && socket.connected()) {
+            socket.disconnect();
+            socket.off();
+            socket = null;
+        }
+        
+        // Clear the adapter to prevent stale data from being displayed
+        if (getAdapter() != null) {
+            setAdapter(null);
+        }
+        
+        // Mark as logged out to prevent callbacks from updating UI
+        isLoggedIn = false;
 
         // Restart the QR login flow instead of closing the app
         checkLogin();
     }
 
     private void gotLiveInfo(Subscription sub, Delivery live) {
+        // Guard against processing live info if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring live info update - user is logged out");
+            return;
+        }
+        
         String l = live.getGroups().get(0).getOrigins().get(0).getUrl() + live.getGroups().get(0).getVariants().get(0).getUrl();
         sub.setStreamUrl(l);
         client.checkLive(l, (status) -> {
+            // Double-check we're still logged in when callback executes
+            if (!isLoggedIn) {
+                dLog(TAG, "Ignoring live status callback - user logged out during request");
+                return Unit.INSTANCE;
+            }
             sub.setStreaming(status == 200);
             dLog("LIVE STATUS", String.valueOf(status));
             return Unit.INSTANCE;
@@ -343,6 +395,12 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotSubscriptions(Subscription[] subs) {
+        // Guard against processing subscriptions if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring subscription update - user is logged out");
+            return;
+        }
+        
         List<Subscription> trimmed = new ArrayList<>();
         for (Subscription sub : subs) {
             if (trimmed.size() > 0) {
@@ -381,6 +439,12 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotVideos(String creatorGUID, Video[] vids) {
+        // Guard against processing videos if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video update - user is logged out");
+            return;
+        }
+        
         if (videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0) {
             videos.get(creatorGUID).addAll(Arrays.asList(vids));
         } else {
@@ -397,7 +461,18 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshVideoProgress() {
+        // Guard against refreshing progress if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video progress refresh - user is logged out");
+            return;
+        }
+        
         client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(videos), progress -> {
+            // Double-check we're still logged in when callback executes
+            if (!isLoggedIn) {
+                dLog(TAG, "Ignoring video progress callback - user logged out during request");
+                return Unit.INSTANCE;
+            }
             videoProgress = progress;
             refreshRows();
             return Unit.INSTANCE;
@@ -405,6 +480,12 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshRows() {
+        // Guard against refreshing rows if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring row refresh - user is logged out");
+            return;
+        }
+        
         List<Subscription> subs = subscriptions;
         ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
         CardPresenter cardPresenter = new CardPresenter(videoProgress);
@@ -578,11 +659,24 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void prepareBackgroundManager() {
-        BackgroundManager mBackgroundManager = BackgroundManager.getInstance(requireActivity());
-        mBackgroundManager.attach(requireActivity().getWindow());
-
-        DisplayMetrics mMetrics = new DisplayMetrics();
-        requireActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
+        // BackgroundManager is a singleton per activity, so we need to avoid attaching multiple times
+        if (backgroundManagerPrepared) {
+            dLog(TAG, "BackgroundManager already prepared, skipping");
+            return;
+        }
+        
+        try {
+            BackgroundManager mBackgroundManager = BackgroundManager.getInstance(requireActivity());
+            mBackgroundManager.attach(requireActivity().getWindow());
+            backgroundManagerPrepared = true;
+            
+            DisplayMetrics mMetrics = new DisplayMetrics();
+            requireActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
+        } catch (IllegalStateException e) {
+            // BackgroundManager is already attached, which is fine
+            dLog(TAG, "BackgroundManager already attached: " + e.getMessage());
+            backgroundManagerPrepared = true;
+        }
     }
 
     @SuppressLint("UseCompatLoadingForDrawables")
