@@ -34,7 +34,7 @@ class RequestTask(context: Context) {
         volleyQueue.add(stringRequest)
     }
 
-    fun sendRequest(uri: String?, cookies: String, callback: VolleyCallback) {
+    fun sendRequest(uri: String?, accessToken: String, callback: VolleyCallback) {
         val stringRequest: StringRequest = object : StringRequest(Method.GET, uri,
             Response.Listener { response: String? ->
                 callback.onSuccess(response ?: "")
@@ -42,18 +42,17 @@ class RequestTask(context: Context) {
                 error.printStackTrace()
                 callback.onError(error)
             }) {
-            override fun getHeaders(): Map<String, String> {
-                val params: MutableMap<String, String> = HashMap()
-                params["Cookie"] = cookies
-                params["Accept"] = "application/json"
-                params["User-Agent"] = "Hydravion (AndroidTV $version), CFNetwork"
-                return params
-            }
+            override fun getHeaders(): Map<String, String> =
+                mapOf(
+                    "Authorization" to "Bearer $accessToken",
+                    "Accept" to "application/json",
+                    "User-Agent" to "Hydravion (AndroidTV $version)"
+                )
         }
         volleyQueue.add(stringRequest)
     }
 
-    fun sendData(uri: String?, cookies: String, params: Map<String, String>?, callback: VolleyCallback) {
+    fun sendData(uri: String?, accessToken: String, params: Map<String, String>?, callback: VolleyCallback) {
         val stringRequest: StringRequest = object : StringRequest(
             Method.POST,
             uri,
@@ -70,15 +69,15 @@ class RequestTask(context: Context) {
             @Throws(AuthFailureError::class)
             override fun getHeaders(): Map<String, String> =
                 mapOf(
-                    "Cookie" to cookies,
+                    "Authorization" to "Bearer $accessToken",
                     "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version), CFNetwork"
+                    "User-Agent" to "Hydravion (AndroidTV $version)"
                 )
         }
         volleyQueue.add(stringRequest)
     }
 
-    fun sendDataWithBody(uri: String?, cookies: String, body: String, callback: VolleyCallback) {
+    fun sendDataWithBody(uri: String?, accessToken: String, body: String, callback: VolleyCallback) {
         val jsonRequest: JsonRequest<String> = object : JsonRequest<String>(
             Method.POST,
             uri,
@@ -93,9 +92,9 @@ class RequestTask(context: Context) {
             @Throws(AuthFailureError::class)
             override fun getHeaders(): Map<String, String> =
                 mapOf(
-                    "Cookie" to cookies,
+                    "Authorization" to "Bearer $accessToken",
                     "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version), CFNetwork",
+                    "User-Agent" to "Hydravion (AndroidTV $version)",
                     "Content-Type" to "application/json"
                 )
 
@@ -107,7 +106,7 @@ class RequestTask(context: Context) {
         volleyQueue.add(jsonRequest)
     }
 
-    fun sendRequest(uri: String?, cookies: String, creatorGUID: String?, callback: VolleyCallback) {
+    fun sendRequest(uri: String?, accessToken: String, creatorGUID: String?, callback: VolleyCallback) {
         val stringRequest: StringRequest = object : StringRequest(
             Method.GET,
             uri,
@@ -120,9 +119,9 @@ class RequestTask(context: Context) {
 
             override fun getHeaders(): Map<String, String> =
                 mapOf(
-                    "Cookie" to cookies,
+                    "Authorization" to "Bearer $accessToken",
                     "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version), CFNetwork"
+                    "User-Agent" to "Hydravion (AndroidTV $version)"
                 )
         }
         volleyQueue.add(stringRequest)

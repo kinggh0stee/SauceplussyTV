@@ -51,7 +51,7 @@ import kotlin.Unit;
 import ml.bmlzootown.hydravion.BuildConfig;
 import ml.bmlzootown.hydravion.Constants;
 import ml.bmlzootown.hydravion.R;
-import ml.bmlzootown.hydravion.authenticate.LoginActivity;
+import ml.bmlzootown.hydravion.authenticate.AuthManager;
 import ml.bmlzootown.hydravion.authenticate.LogoutRequestTask;
 import ml.bmlzootown.hydravion.card.CardPresenter;
 import ml.bmlzootown.hydravion.client.HydravionClient;
@@ -84,8 +84,6 @@ public class MainFragment extends BrowseSupportFragment {
     private Socket socket;
     private final Gson gson = new Gson();
 
-    public static String sailssid;
-
     public static List<Subscription> subscriptions = new ArrayList<>();
     private static NavigableMap<Integer, Video> strms = new TreeMap<>();
     public static HashMap<String, ArrayList<Video>> videos = new HashMap<>();
@@ -99,6 +97,10 @@ public class MainFragment extends BrowseSupportFragment {
 
     private final Handler liveHandler = new Handler(Looper.getMainLooper());
     private int liveIndex = -1;
+    private boolean backgroundManagerPrepared = false;
+    private boolean uiInitialized = false;
+    private boolean isLoggedIn = false;
+    private boolean adapterInitialized = false;
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -128,32 +130,49 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void checkLogin() {
-        boolean gotCookies = loadCredentials();
-        if (!gotCookies) {
-            Intent intent = new Intent(getActivity(), LoginActivity.class);
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+        authManager.withValidAccessToken(accessToken -> {
+            dLog("LOGIN", "Access token valid (or refreshed successfully)");
+            isLoggedIn = true;
+            initialize();
+            return Unit.INSTANCE;
+        }, () -> {
+            dLog("LOGIN", "No valid access token or refresh token available. Starting login flow.");
+            isLoggedIn = false;
+            Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.QrLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
             startActivityForResult(intent, 42);
-        } else {
-            initialize();
-        }
+            return Unit.INSTANCE;
+        });
     }
 
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 42 && resultCode == 1 && data != null) {
-            ArrayList<String> cookies = data.getStringArrayListExtra("cookies");
-            for (String cookie : cookies) {
-                String[] c = cookie.split("=");
-                if (c[0].equalsIgnoreCase("sails.sid")) {
-                    sailssid = c[1];
-                }
-            }
-            dLog("MainFragment", sailssid);
+        if (requestCode == 42 && resultCode == RESULT_OK && data != null) {
+            String accessToken = data.getStringExtra("access_token");
+            String refreshToken = data.getStringExtra("refresh_token");
+            long expiresIn = data.getLongExtra("expires_in", 3600L);
 
-            saveCredentials();
-            initialize();
+            if (accessToken != null && !accessToken.isEmpty()) {
+                long expiresAt = System.currentTimeMillis() + (expiresIn * 1000L);
+                // Use empty string if refreshToken is null to avoid NullPointerException
+                String safeRefreshToken = (refreshToken != null) ? refreshToken : "";
+                requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
+                        .putString(Constants.PREF_ACCESS_TOKEN, accessToken)
+                        .putString(Constants.PREF_REFRESH_TOKEN, safeRefreshToken)
+                        .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
+                        .commit();
+
+                // Mark as logged in and initialize
+                isLoggedIn = true;
+                initialize();
+            } else {
+                dLog(TAG, "Login result missing access token; restarting login flow.");
+                // Restart login flow to avoid running without credentials
+                checkLogin();
+            }
         } else if (requestCode == Constants.REQ_CODE_DETAIL && resultCode == RESULT_OK && data != null) {
             if (data.getBooleanExtra("REFRESH", false)) {
                 refreshVideoProgress();
@@ -164,18 +183,31 @@ public class MainFragment extends BrowseSupportFragment {
     private void initialize() {
         refreshSubscriptions();
         prepareBackgroundManager();
-        setupUIElements();
-        setupEventListeners();
-
+        
+        // Only setup UI elements and listeners once, before views are created
+        if (!uiInitialized) {
+            setupUIElements();
+            setupEventListeners();
+            uiInitialized = true;
+        }
+        // TODO: Temporarily disabled - backend doesn't support auth tokens with websockets yet
         // Setup Socket
-        setupSocket();
+        // setupSocket();
     }
 
     private void setupSocket() {
-        socket = socketClient.initialize();
-        socket.on("connect", onSocketConnect);
-        socket.on("disconnect", onSocketDisconnect);
-        socket.on("syncEvent", onSyncEvent);
+        socketClient.initialize(sock -> {
+            if (sock == null) {
+                dLog("SOCKET", "Failed to initialize socket due to auth error");
+                return Unit.INSTANCE;
+            }
+
+            socket = sock;
+            socket.on("connect", onSocketConnect);
+            socket.on("disconnect", onSocketDisconnect);
+            socket.on("syncEvent", onSyncEvent);
+            return Unit.INSTANCE;
+        });
     }
 
     // Socket Event Emitters
@@ -202,7 +234,8 @@ public class MainFragment extends BrowseSupportFragment {
 
     private final Emitter.Listener onSocketDisconnect = args -> {
         dLog("SOCKET", "Disconnected");
-        setupSocket();
+        // TODO: Temporarily disabled - backend doesn't support auth tokens with websockets yet
+        // setupSocket();
     };
 
     private final Emitter.Listener onSyncEvent = args -> {
@@ -243,52 +276,87 @@ public class MainFragment extends BrowseSupportFragment {
         dLog("SOCKET --> SYNCEVENT", event.toString());
     };
 
-    private boolean loadCredentials() {
-        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
-        sailssid = prefs.getString(Constants.PREF_SAIL_SSID, "default");
-        dLog("SAILS.SID", sailssid);
-
-        if (sailssid.equals("default")) {
-            dLog("LOGIN", "Credentials not found!");
-            return false;
-        } else {
-            dLog("LOGIN", "Credentials found!");
-            return true;
-        }
-    }
-
     private void logout() {
-        // Invalidate cookies via API
-        LogoutRequestTask lrt = new LogoutRequestTask(getContext());
-        String cookies = "sails.sid=" + sailssid + ";";
-        lrt.logout(cookies, new LogoutRequestTask.VolleyCallback() {
-            @Override
-            public void onSuccess(String response) {
-                dLog("LOGOUT", "Success!");
-            }
+        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
+        String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
 
-            @Override
-            public void onError(VolleyError error) {
-                dLog("LOGOUT --> ERROR", error.getMessage());
-            }
-        });
+        // Best-effort token revocation; ignore errors
+        if (accessToken != null && !accessToken.isEmpty()) {
+            LogoutRequestTask lrt = new LogoutRequestTask(getContext());
+            lrt.logout(accessToken, new LogoutRequestTask.VolleyCallback() {
+                @Override
+                public void onSuccess(String response) {
+                    dLog("LOGOUT", "Token revoked");
+                }
 
-        // Removed cookies, save dummy cookies, and close client
-        sailssid = "default";
-        saveCredentials();
-        requireActivity().finishAndRemoveTask();
-    }
+                @Override
+                public void onError(VolleyError error) {
+                    dLog("LOGOUT", "Revocation failed: " + error.getMessage());
+                }
+            });
+        }
 
-    private void saveCredentials() {
-        requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
-                .putString(Constants.PREF_SAIL_SSID, sailssid)
-                .apply();
+        // Clear tokens and in-memory data
+        // Use AuthManager to clear both SharedPreferences and in-memory cache
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), prefs);
+        authManager.clearTokens();
+
+        // Clear all in-memory data structures
+        subscriptions.clear();
+        videos.clear();
+        strms.clear();
+        videoProgress.clear();
+        
+        // Reset state variables
+        subCount = 0;
+        page = 1;
+        rowSelected = 0;
+        colSelected = 0;
+        liveIndex = -1;
+        
+        // Remove any pending live handler callbacks to prevent accessing cleared data
+        liveHandler.removeCallbacksAndMessages(null);
+        
+        // Disconnect socket if connected
+        if (socket != null && socket.connected()) {
+            socket.disconnect();
+            socket.off();
+            socket = null;
+        }
+        
+        // Clear the adapter to prevent stale data from being displayed
+        if (getAdapter() != null) {
+            setAdapter(null);
+        }
+        
+        // Reset adapter initialization flag
+        adapterInitialized = false;
+        
+        // Reset UI initialization flag to allow proper setup on next login
+        uiInitialized = false;
+        
+        // Mark as logged out to prevent callbacks from updating UI
+        isLoggedIn = false;
+
+        // Restart the QR login flow instead of closing the app
+        checkLogin();
     }
 
     private void gotLiveInfo(Subscription sub, Delivery live) {
+        // Guard against processing live info if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring live info update - user is logged out");
+            return;
+        }
+        
         String l = live.getGroups().get(0).getOrigins().get(0).getUrl() + live.getGroups().get(0).getVariants().get(0).getUrl();
         sub.setStreamUrl(l);
         client.checkLive(l, (status) -> {
+            // Double-check we're still logged in when callback executes
+            if (!isLoggedIn) {
+                dLog(TAG, "Ignoring live status callback - user logged out during request");
+                return Unit.INSTANCE;
+            }
             sub.setStreaming(status == 200);
             dLog("LIVE STATUS", String.valueOf(status));
             return Unit.INSTANCE;
@@ -301,12 +369,14 @@ public class MainFragment extends BrowseSupportFragment {
             if (subscriptions == null) {
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
-                        .setMessage("Re-open Hydravion to login again!")
-                        .setPositiveButton("OK",
+                        .setMessage("Your Floatplane session has expired. Please relink your account.")
+                        .setPositiveButton("Relink",
                                 (dialog, which) -> {
                                     dialog.dismiss();
                                     logout();
                                 })
+                        .setNegativeButton("Cancel",
+                                (dialog, which) -> dialog.dismiss())
                         .create()
                         .show();
             } else {
@@ -330,6 +400,12 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotSubscriptions(Subscription[] subs) {
+        // Guard against processing subscriptions if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring subscription update - user is logged out");
+            return;
+        }
+        
         List<Subscription> trimmed = new ArrayList<>();
         for (Subscription sub : subs) {
             if (trimmed.size() > 0) {
@@ -368,23 +444,55 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotVideos(String creatorGUID, Video[] vids) {
+        // Guard against processing videos if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video update - user is logged out");
+            return;
+        }
+        
+        boolean isPagination = adapterInitialized && videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0;
+        int previousSize = (videos.get(creatorGUID) != null) ? videos.get(creatorGUID).size() : 0;
+        
         if (videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0) {
             videos.get(creatorGUID).addAll(Arrays.asList(vids));
         } else {
             videos.put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
         }
 
-        if (subCount > 1) {
-            subCount--;
+        if (isPagination) {
+            // For pagination, append videos immediately for this creator without waiting for others
+            appendVideosToRows(creatorGUID, previousSize);
+            // Still track subCount for coordination, but don't block on it
+            if (subCount > 1) {
+                subCount--;
+            } else {
+                subCount = subscriptions.size();
+            }
         } else {
-            refreshVideoProgress();
-            subCount = subscriptions.size();
-            setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+            // Initial load - wait for all subscriptions to finish, then do full refresh
+            if (subCount > 1) {
+                subCount--;
+            } else {
+                refreshVideoProgress();
+                subCount = subscriptions.size();
+                setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+            }
         }
     }
 
     private void refreshVideoProgress() {
+        // Guard against refreshing progress if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video progress refresh - user is logged out");
+            return;
+        }
+        
         client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(videos), progress -> {
+            // Double-check we're still logged in when callback executes
+            if (!isLoggedIn) {
+                dLog(TAG, "Ignoring video progress callback - user logged out during request");
+                return Unit.INSTANCE;
+            }
             videoProgress = progress;
             refreshRows();
             return Unit.INSTANCE;
@@ -392,6 +500,12 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshRows() {
+        // Guard against refreshing rows if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring row refresh - user is logged out");
+            return;
+        }
+        
         List<Subscription> subs = subscriptions;
         ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
         CardPresenter cardPresenter = new CardPresenter(videoProgress);
@@ -468,6 +582,7 @@ public class MainFragment extends BrowseSupportFragment {
         rowsAdapter.add(new ListRow(gridHeader, gridRowAdapter));
 
         setAdapter(rowsAdapter);
+        adapterInitialized = true;
     }
 
     private void addLiveToRow(Integer row, Video stream, List<Subscription> subs) {
@@ -514,6 +629,63 @@ public class MainFragment extends BrowseSupportFragment {
             }
         };
         liveHandler.post(runnable);
+    }
+
+    private void appendVideosToRows(String creatorGUID, int previousSize) {
+        // Guard against appending if we're logged out
+        if (!isLoggedIn) {
+            dLog(TAG, "Ignoring video append - user is logged out");
+            return;
+        }
+        
+        ArrayObjectAdapter rowsAdapter = (ArrayObjectAdapter) getAdapter();
+        if (rowsAdapter == null) {
+            dLog(TAG, "Adapter not initialized, falling back to full refresh");
+            refreshVideoProgress();
+            return;
+        }
+        
+        int rowIndex = getRow(creatorGUID, subscriptions);
+        if (rowIndex == -1 || rowIndex >= rowsAdapter.size()) {
+            dLog(TAG, "Invalid row index for creator: " + creatorGUID);
+            return;
+        }
+        
+        ListRow listRow = (ListRow) rowsAdapter.get(rowIndex);
+        if (listRow == null) {
+            dLog(TAG, "ListRow is null for row index: " + rowIndex);
+            return;
+        }
+        
+        ArrayObjectAdapter listRowAdapter = (ArrayObjectAdapter) listRow.getAdapter();
+        if (listRowAdapter == null) {
+            dLog(TAG, "ListRow adapter is null for row index: " + rowIndex);
+            return;
+        }
+        
+        List<Video> vids = videos.get(creatorGUID);
+        if (vids == null || vids.size() <= previousSize) {
+            dLog(TAG, "No new videos to append for creator: " + creatorGUID);
+            return;
+        }
+        
+        // Get new videos that were added
+        List<Video> newVideos = vids.subList(previousSize, vids.size());
+        
+        // Store the insertion position before adding items
+        int insertPosition = listRowAdapter.size();
+        
+        // Add new videos to the adapter (add() automatically notifies, but we'll be explicit for the range)
+        for (Video video : newVideos) {
+            listRowAdapter.add(video);
+        }
+        
+        // Notify adapter of the new items for smooth insertion without full refresh
+        // Using notifyArrayItemRangeChanged to match existing code pattern
+        listRowAdapter.notifyArrayItemRangeChanged(insertPosition, newVideos.size());
+        
+        // Selection position should be automatically preserved since we're not calling setAdapter()
+        dLog(TAG, "Appended " + newVideos.size() + " videos to row " + rowIndex + " starting at position " + insertPosition);
     }
 
     private void addToRow(Video video, List<Subscription> subs) {
@@ -565,11 +737,24 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void prepareBackgroundManager() {
-        BackgroundManager mBackgroundManager = BackgroundManager.getInstance(requireActivity());
-        mBackgroundManager.attach(requireActivity().getWindow());
-
-        DisplayMetrics mMetrics = new DisplayMetrics();
-        requireActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
+        // BackgroundManager is a singleton per activity, so we need to avoid attaching multiple times
+        if (backgroundManagerPrepared) {
+            dLog(TAG, "BackgroundManager already prepared, skipping");
+            return;
+        }
+        
+        try {
+            BackgroundManager mBackgroundManager = BackgroundManager.getInstance(requireActivity());
+            mBackgroundManager.attach(requireActivity().getWindow());
+            backgroundManagerPrepared = true;
+            
+            DisplayMetrics mMetrics = new DisplayMetrics();
+            requireActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
+        } catch (IllegalStateException e) {
+            // BackgroundManager is already attached, which is fine
+            dLog(TAG, "BackgroundManager already attached: " + e.getMessage());
+            backgroundManagerPrepared = true;
+        }
     }
 
     @SuppressLint("UseCompatLoadingForDrawables")
@@ -650,6 +835,7 @@ public class MainFragment extends BrowseSupportFragment {
         switch (action) {
             case REFRESH:
                 videos.clear();
+                adapterInitialized = false; // Reset flag on manual refresh
                 refreshSubscriptions(); // Refresh will get subs and videos again, then refresh row UI
                 break;
             case LOGOUT:

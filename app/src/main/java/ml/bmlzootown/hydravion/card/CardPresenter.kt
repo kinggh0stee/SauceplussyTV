@@ -129,7 +129,7 @@ class CardPresenter(private val videoProgress: List<VideoProgress>) : Presenter(
                         .load(
                             GlideUrl(
                                 thumbnail, LazyHeaders.Builder()
-                                    .addHeader("User-Agent", "Hydravion (AndroidTV $version), CFNetwork")
+                                    .addHeader("User-Agent", "Hydravion (AndroidTV $version)")
                                     .build()
                             )
                         )

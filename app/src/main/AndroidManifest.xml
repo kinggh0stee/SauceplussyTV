@@ -26,6 +26,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -58,10 +59,9 @@
         <activity
             android:name=".playback.PlaybackActivity"
             android:exported="false" />
-        <!-- Not sure if this one needs to be exported or not -->
         <activity
-            android:name=".authenticate.LoginActivity"
-            android:exported="true"
+            android:name=".authenticate.QrLoginActivity"
+            android:exported="false"
             android:noHistory="true" />
     </application>
 

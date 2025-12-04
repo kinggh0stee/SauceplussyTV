@@ -42,7 +42,7 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
                             .load(
                                 GlideUrl(
                                     creator.icon?.path, LazyHeaders.Builder()
-                                        .addHeader("User-Agent", "Hydravion (AndroidTV $version), CFNetwork")
+                                        .addHeader("User-Agent", "Hydravion (AndroidTV $version)")
                                         .build()
                                 )
                             )

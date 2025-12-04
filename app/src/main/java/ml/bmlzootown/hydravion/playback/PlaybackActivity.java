@@ -33,6 +33,7 @@ import java.util.HashMap;
 
 import kotlin.Unit;
 import ml.bmlzootown.hydravion.R;
+import ml.bmlzootown.hydravion.authenticate.AuthManager;
 import ml.bmlzootown.hydravion.browse.MainFragment;
 import ml.bmlzootown.hydravion.client.HydravionClient;
 import ml.bmlzootown.hydravion.detail.DetailsActivity;
@@ -57,6 +58,8 @@ public class PlaybackActivity extends FragmentActivity {
     private int currentWindow = 0;
     private long playbackPosition = 0;
     private boolean resumed = false;
+    private boolean playerInitialized = false;
+    private boolean initializationInProgress = false;
 
     private String url = "";
     private Video video;
@@ -101,9 +104,10 @@ public class PlaybackActivity extends FragmentActivity {
         super.onStart();
 
         if (Util.SDK_INT > 23) {
-            initializePlayer();
-            mediaController.setPlayer(player);
-            mediaSession.setActive(true);
+            // Only initialize if not already initialized or in progress
+            if (!playerInitialized && !initializationInProgress && player == null) {
+                initializePlayer();
+            }
         }
     }
 
@@ -112,9 +116,10 @@ public class PlaybackActivity extends FragmentActivity {
         super.onResume();
 
         if (Util.SDK_INT <= 23 || player == null) {
-            initializePlayer();
-            mediaController.setPlayer(player);
-            mediaSession.setActive(true);
+            // Only initialize if not already initialized or in progress
+            if (!playerInitialized && !initializationInProgress) {
+                initializePlayer();
+            }
         }
     }
 
@@ -123,7 +128,15 @@ public class PlaybackActivity extends FragmentActivity {
         super.onPause();
 
         if (Util.SDK_INT <= 23) {
-            mediaController.setPlayer(null);
+            // Cancel any in-progress initialization
+            if (initializationInProgress) {
+                initializationInProgress = false;
+            }
+            
+            if (playerInitialized) {
+                mediaController.setPlayer(null);
+                playerInitialized = false;
+            }
             mediaSession.setActive(false);
             saveVideoPosition();
             releasePlayer();
@@ -135,7 +148,15 @@ public class PlaybackActivity extends FragmentActivity {
         super.onStop();
 
         if (Util.SDK_INT > 23) {
-            mediaController.setPlayer(null);
+            // Cancel any in-progress initialization
+            if (initializationInProgress) {
+                initializationInProgress = false;
+            }
+            
+            if (playerInitialized) {
+                mediaController.setPlayer(null);
+                playerInitialized = false;
+            }
             mediaSession.setActive(false);
             saveVideoPosition();
             releasePlayer();
@@ -232,51 +253,89 @@ public class PlaybackActivity extends FragmentActivity {
     }
 
     private void initializePlayer() {
-        player = new ExoPlayer.Builder(this).build();
-        player.setPlayWhenReady(playWhenReady);
-        player.seekTo(currentWindow, playbackPosition);
-        playerView.setPlayer(player);
-        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-        HashMap<String, String> cookieMap = new HashMap<>();
-        cookieMap.put("Cookie", "sails.sid=" + MainFragment.sailssid + ";");
-        dataSourceFactory.setDefaultRequestProperties(cookieMap);
-        int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
-        DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
-        MediaItem mi = MediaItem.fromUri(url);
-        HlsMediaSource hlsMediaSource = new HlsMediaSource.Factory(dataSourceFactory).setExtractorFactory(extractorFactory).createMediaSource(mi);
-        player.setMediaSource(hlsMediaSource);
-
-        player.prepare();
-
-        player.addListener(new Player.Listener() {
-
-            @Override
-            public void onPlayerError(@NonNull PlaybackException error) {
-                if (video != null) {
-                    releasePlayer();
-                    Toast.makeText(PlaybackActivity.this, "Video could not be played!", Toast.LENGTH_LONG).show();
-                }
-                MainFragment.dError("EXOPLAYER", error.getLocalizedMessage());
+        // Mark initialization as in progress
+        initializationInProgress = true;
+        
+        AuthManager authManager = AuthManager.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
+        authManager.withValidAccessToken(accessToken -> {
+            // Check if initialization was cancelled or activity is no longer valid
+            if (!initializationInProgress || isFinishing() || isDestroyed()) {
+                initializationInProgress = false;
+                return Unit.INSTANCE;
             }
+            
+            player = new ExoPlayer.Builder(this).build();
+            player.setPlayWhenReady(playWhenReady);
+            player.seekTo(currentWindow, playbackPosition);
+            playerView.setPlayer(player);
 
-            @Override
-            public void onPlaybackStateChanged(int state) {
-                MainFragment.dLog("STATE", state + "");
-                switch (state) {
-                    case Player.STATE_READY:
-                        if (getIntent().getBooleanExtra(DetailsActivity.Resume, false) && !resumed) {
-                            player.seekTo(video.getVideoInfo().getProgress() * 1000);
-                            resumed = true;
-                        }
-                        break;
-                    case Player.STATE_ENDED:
-                        saveVideoPosition();
+            DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
+            String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
+            HashMap<String, String> headers = new HashMap<>();
+            headers.put("Authorization", "Bearer " + accessToken);
+            headers.put("User-Agent", "Hydravion (AndroidTV " + version + ")");
+            dataSourceFactory.setDefaultRequestProperties(headers);
+
+            int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
+            DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
+            MediaItem mi = MediaItem.fromUri(url);
+            HlsMediaSource hlsMediaSource = new HlsMediaSource.Factory(dataSourceFactory).setExtractorFactory(extractorFactory).createMediaSource(mi);
+            player.setMediaSource(hlsMediaSource);
+
+            player.prepare();
+
+            // Set up player listener
+            player.addListener(new Player.Listener() {
+
+                @Override
+                public void onPlayerError(@NonNull PlaybackException error) {
+                    if (video != null) {
                         releasePlayer();
-                        break;
-                    default:
-                        break;
+                        Toast.makeText(PlaybackActivity.this, "Video could not be played!", Toast.LENGTH_LONG).show();
+                    }
+                    MainFragment.dError("EXOPLAYER", error.getLocalizedMessage());
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    MainFragment.dLog("STATE", state + "");
+                    switch (state) {
+                        case Player.STATE_READY:
+                            if (getIntent().getBooleanExtra(DetailsActivity.Resume, false) && !resumed) {
+                                player.seekTo(video.getVideoInfo().getProgress() * 1000);
+                                resumed = true;
+                            }
+                            break;
+                        case Player.STATE_ENDED:
+                            saveVideoPosition();
+                            releasePlayer();
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            });
+
+            // Only set up media session if activity is still in a valid state
+            if (!isFinishing() && !isDestroyed()) {
+                mediaController.setPlayer(player);
+                mediaSession.setActive(true);
+                playerInitialized = true;
+            } else {
+                // Activity is no longer valid, release the player
+                if (player != null) {
+                    player.release();
+                    player = null;
                 }
             }
+            
+            initializationInProgress = false;
+            return Unit.INSTANCE;
+        }, () -> {
+            initializationInProgress = false;
+            Toast.makeText(this, "Session expired. Please relink your account.", Toast.LENGTH_LONG).show();
+            finish();
+            return Unit.INSTANCE;
         });
     }
 
@@ -294,6 +353,8 @@ public class PlaybackActivity extends FragmentActivity {
             player.stop();
             player.release();
             player = null;
+            playerInitialized = false;
+            initializationInProgress = false;
             this.finish();
         }
     }
