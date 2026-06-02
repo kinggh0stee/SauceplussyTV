@@ -1,0 +1,5 @@
+# Local reverse-engineering reference material (APKs, HARs, captures).
+# Nothing in here is part of the app or tracked by git.
+*
+!.gitignore
+!README.md
