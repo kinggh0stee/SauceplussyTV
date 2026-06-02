@@ -4,32 +4,25 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-This is **Sauce+ for Android TV** — a fork of the [Hydravion Android TV
-app](https://github.com/bmlzootown/Hydravion-AndroidTV) (an unofficial
-**Floatplane** client) being rebranded and repointed to **Sauce+**
-(`https://www.sauceplus.com`, discover page: `https://www.sauceplus.com/discover`).
+This is **SaucedplussyTV** — an unofficial Android TV client for Sauce+
+(`https://www.sauceplus.com`). It is a fork of the [Hydravion Android TV
+app](https://github.com/bmlzootown/Hydravion-AndroidTV) that has been heavily
+modified and repointed from Floatplane to Sauce+.
+
+**⚠️ IMPORTANT:** SaucedplussyTV is an unofficial, third-party client. It is not
+affiliated with, endorsed by, or connected to Sauce+ or Floatplane Media Inc.
 
 Sauce+ runs the **same backend software as Floatplane**, so the existing
 `/api/v3/...` API contract and the socket.io live/sync mechanism are the starting
-assumptions. The work is (1) rebrand the app's identity and endpoints from
-Floatplane/Hydravion to Sauce+, and (2) build out / adjust Android TV features on
-top of that base.
+assumptions. The work is (1) complete the rebrand from Hydravion to
+SaucedplussyTV, and (2) build out / adjust Android TV features on top of that
+base.
 
-The upstream package is still `ml.bmlzootown.hydravion` and many user-facing and
-endpoint references still say "Hydravion" / "floatplane.com". Treat those as the
-rebrand backlog, not as the intended final state.
+## Auth model
 
-## Auth model — IMPORTANT (differs from upstream Hydravion)
-
-Confirmed 2026-06-01 by decompiling the official Sauce+ Android app (package
-`com.floatplane.sauceplus`, a React Native / white-label Floatplane app). Full
-notes: `reference/RECON.md`.
-
-**Sauce+ = white-label Floatplane, legacy cookie-session auth — NOT Keycloak.**
-The current upstream TV code uses an OIDC device-code/QR flow
-(`QrLoginActivity.java` → `auth.floatplane.com/realms/floatplane`). **Sauce+ has no
-such host/realm; that flow must be replaced.** (`link.sauceplus.com` is SMTP2GO
-email tracking, not a device-link page — ignore it.)
+Sauce+ uses legacy cookie-session auth (not Keycloak/OIDC). Confirmed by
+decompiling the official Sauce+ Android app (package `com.floatplane.sauceplus`).
+Full notes: `reference/RECON.md`.
 
 **API base host: `https://www.sauceplus.com`** (serves all `/api/v3/...`).
 
@@ -48,29 +41,24 @@ email tracking, not a device-link page — ignore it.)
 that has passed CF — i.e. carry a valid **`cf_clearance`** cookie with a
 **consistent User-Agent**.
 
-**Recommended TV auth design (replaces `QrLoginActivity`/OIDC):** a **WebView
-login**. Load the Sauce+ login page in a `WebView` (user solves Turnstile + the CF
-challenge naturally there), then harvest `sails.sid` + `cf_clearance` from
-`CookieManager` and use them — with the WebView's User-Agent — for all `/api/v3`
-calls via the existing `RequestTask`/OkHttp path.
+**TV auth:** `WebLoginActivity` loads `https://www.sauceplus.com/login` in a
+`WebView` (user solves Turnstile + CF challenge naturally), then harvests
+`sails.sid` + `cf_clearance` from `CookieManager` and uses them — with the
+WebView's User-Agent — for all `/api/v3` calls via `RequestTask`/OkHttp.
 
 **Content/playback API is unchanged** — the `/api/v3` content/creator/delivery/
-socket endpoints `HydravionClient` already calls match the Sauce+ app, so that
-layer is just a **host swap to `www.sauceplus.com`**. Only the auth layer is a
-rewrite.
-
-Still worth a one-time live HAR to confirm exact JSON field casing and whether
-`/api/v3` needs `cf_clearance` in addition to `sails.sid`.
+socket endpoints match the Sauce+ app, so that layer is just a **host swap to
+`www.sauceplus.com`**. Only the auth layer was rewritten.
 
 ## Tech stack
 
 - **Platform:** Android TV, AndroidX **Leanback** (D-pad only, no touch).
-  `minSdk 26`, `target/compileSdk 34`, Java 17, Gradle (Groovy DSL).
+  `minSdk 26`, `target/compileSdk 34`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1.
 - **Languages:** mixed **Kotlin + Java** — match the surrounding file's language.
-- **Playback:** ExoPlayer `2.17.1` (+ mediasession extension).
+- **Playback:** ExoPlayer `2.19.1` (+ mediasession extension).
+  **TODO:** Migrate to Media3 (`androidx.media3:media3-exoplayer:1.10.1`).
 - **Networking:** Volley + OkHttp 5 (alpha) + `socket.io-client`; Gson for JSON.
-- **UI/misc:** Glide (images), PrettyTime, ZXing (QR login), NanoHTTPD (local
-  server), versioncompare.
+- **UI/misc:** Glide (images), PrettyTime, NanoHTTPD (local server), versioncompare.
 
 ## Build & run
 
@@ -85,21 +73,20 @@ Always run `assembleDebug` before handing a change off for review.
 
 ## Architecture (where things live)
 
-`app/src/main/java/ml/bmlzootown/hydravion/`
+`app/src/main/java/com/saucedplussytv/androidtv/`
 
 - `browse/` — `MainActivity`, `MainFragment` (Leanback browse), presenters,
   selection/click listeners, settings.
 - `card/`, `subscription/`, `detail/` — Leanback presenters, details + playback
   description UI.
 - `playback/PlaybackActivity` — ExoPlayer playback screen.
-- `client/` — `HydravionClient` (API facade), `RequestTask` (Volley +
+- `client/` — `SaucedplussyTVClient` (API facade), `RequestTask` (Volley +
   `VolleyCallback`), `SocketClient`/`SyncEvent`/`UserSync` (live/sync).
-- `authenticate/` — `AuthManager` (OIDC tokens in SharedPreferences),
-  `QrLoginActivity` (Keycloak device-code flow), `LogoutRequestTask`. **NOTE:**
-  this whole OIDC flow is upstream-Floatplane and does not match Sauce+ — see the
-  "Auth model" section; it must be reworked to username/password session login.
+- `authenticate/` — `AuthManager` (session cookies + UA in SharedPreferences),
+  `WebLoginActivity` (WebView cookie harvest login). Replaces the removed
+  `QrLoginActivity`/Keycloak device-code flow.
 - `models/`, `creator/`, `post/` — Gson DTOs and domain types.
-- `Constants.kt` — token preference keys.
+- `Constants.kt` — session preference keys.
 
 Key invariants already established in the code (don't regress them):
 
@@ -111,27 +98,31 @@ Key invariants already established in the code (don't regress them):
 - Debug logging is via `MainFragment.dLog(...)` guarded by `BuildConfig.DEBUG`;
   **never log tokens or full auth responses.**
 
-## Rebrand surface (Floatplane/Hydravion → Sauce+)
+## Rebrand status
 
-Audit with `grep -rin 'hydravion\|floatplane\|bmlzootown' app/src`. Notable spots:
+The app identity migration from Hydravion → SaucedplussyTV is **substantially
+complete** in code:
 
-- Endpoints: `HydravionClient.kt` (`SITE`, all `/api/v3/...`), `SocketClient.kt`
-  (`SOCKET_URI`, `Origin` header).
-- Auth: `AuthManager.kt`, `QrLoginActivity.java`, `LogoutRequestTask.java` —
-  currently `https://auth.floatplane.com/realms/floatplane/...` (Keycloak OIDC).
-  **Sauce+ has no such realm** — this is a rewrite to username/password session
-  login + Discord OAuth, behind Cloudflare Turnstile (see "Auth model").
-- Identity: `applicationId` + `namespace` in `app/build.gradle`; `app_name` /
-  `browse_title` in `res/values/strings.xml`.
-- Update check: `LATEST` GitHub URL points at the upstream Hydravion repo.
-- Assets: `res/drawable/banner.png`, `icon.png`, `ic_hydravion.xml`, launcher
-  mipmaps, `colors.xml`.
+- ✅ Package: `com.saucedplussytv.androidtv`
+- ✅ App name / user-facing strings: "SaucedplussyTV"
+- ✅ API host: `sauceplus.com`
+- ✅ Auth: WebView cookie-session (not Keycloak)
+- ✅ Class names: `SaucedplussyTVClient` (was `HydravionClient`)
+- ✅ Build artifacts: `SaucedplussyTV-*.apk`
+- ✅ Documentation: README, CLAUDE.md, TODO.md
+
+**Remaining (asset swaps — requires human/designer):**
+- `res/drawable/banner.png` — TV banner
+- `res/drawable/icon.png` — app icon
+- `res/drawable/ic_saucedplussytv.xml` — vector icon (renamed from `ic_hydravion`)
+- Launcher mipmaps in `res/mipmap-*`
+- `res/values/colors.xml` — brand colors
 
 ## Sub-agents and the review gate (IMPORTANT)
 
 This repo defines sub-agents in `.claude/agents/`:
 
-- **`rebrand-engineer`** — identity + endpoint migration to Sauce+.
+- **`rebrand-engineer`** — identity + endpoint migration.
 - **`api-client`** — v3 API plumbing, models, auth/socket layer.
 - **`android-feature-dev`** — Leanback UI, presenters, playback, lifecycle.
 - **`senior-reviewer`** — the **final gate** for *all* code.
@@ -169,8 +160,9 @@ surface the failure rather than skipping review.
 ## Conventions
 
 - Match existing style and language (Kotlin vs Java) of the file you touch.
-- Prefer reusing the existing `HydravionClient`/`RequestTask`/presenter patterns
+- Prefer reusing the existing `SaucedplussyTVClient`/`RequestTask`/presenter patterns
   over introducing parallel mechanisms.
 - This is a fork that may still track upstream — make targeted changes; don't
   do sweeping rewrites unless asked.
 - Keep secrets and tokens out of logs and source.
+- See `TODO.md` for planned upgrades and feature ideas.
