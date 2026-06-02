@@ -27,7 +27,6 @@ import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.PresenterSelector;
 
-import com.android.volley.VolleyError;
 import com.google.android.exoplayer2.util.Util;
 import com.google.gson.Gson;
 
@@ -52,7 +51,6 @@ import ml.bmlzootown.hydravion.BuildConfig;
 import ml.bmlzootown.hydravion.Constants;
 import ml.bmlzootown.hydravion.R;
 import ml.bmlzootown.hydravion.authenticate.AuthManager;
-import ml.bmlzootown.hydravion.authenticate.LogoutRequestTask;
 import ml.bmlzootown.hydravion.card.CardPresenter;
 import ml.bmlzootown.hydravion.client.HydravionClient;
 import ml.bmlzootown.hydravion.client.SocketClient;
@@ -137,11 +135,11 @@ public class MainFragment extends BrowseSupportFragment {
             initialize();
             return Unit.INSTANCE;
         }, () -> {
-            dLog("LOGIN", "No valid access token or refresh token available. Starting login flow.");
+            dLog("LOGIN", "No stored session; starting login flow.");
             isLoggedIn = false;
-            Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.QrLoginActivity.class);
+            Intent intent = new Intent(getActivity(), ml.bmlzootown.hydravion.authenticate.WebLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
-            startActivityForResult(intent, 42);
+            startActivityForResult(intent, Constants.REQ_CODE_LOGIN);
             return Unit.INSTANCE;
         });
     }
@@ -150,26 +148,20 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 42 && resultCode == RESULT_OK && data != null) {
-            String accessToken = data.getStringExtra("access_token");
-            String refreshToken = data.getStringExtra("refresh_token");
-            long expiresIn = data.getLongExtra("expires_in", 3600L);
+        if (requestCode == Constants.REQ_CODE_LOGIN && resultCode == RESULT_OK && data != null) {
+            String sessionCookie = data.getStringExtra(ml.bmlzootown.hydravion.authenticate.WebLoginActivity.EXTRA_SESSION_COOKIE);
+            String userAgent = data.getStringExtra(ml.bmlzootown.hydravion.authenticate.WebLoginActivity.EXTRA_USER_AGENT);
 
-            if (accessToken != null && !accessToken.isEmpty()) {
-                long expiresAt = System.currentTimeMillis() + (expiresIn * 1000L);
-                // Use empty string if refreshToken is null to avoid NullPointerException
-                String safeRefreshToken = (refreshToken != null) ? refreshToken : "";
-                requireActivity().getPreferences(Context.MODE_PRIVATE).edit()
-                        .putString(Constants.PREF_ACCESS_TOKEN, accessToken)
-                        .putString(Constants.PREF_REFRESH_TOKEN, safeRefreshToken)
-                        .putLong(Constants.PREF_TOKEN_EXPIRES_AT, expiresAt)
-                        .commit();
+            if (sessionCookie != null && !sessionCookie.isEmpty()) {
+                AuthManager authManager = AuthManager.Companion.getInstance(
+                        requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+                authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
 
                 // Mark as logged in and initialize
                 isLoggedIn = true;
                 initialize();
             } else {
-                dLog(TAG, "Login result missing access token; restarting login flow.");
+                dLog(TAG, "Login result missing session cookie; restarting login flow.");
                 // Restart login flow to avoid running without credentials
                 checkLogin();
             }
@@ -278,28 +270,15 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void logout() {
         SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
-        String accessToken = prefs.getString(Constants.PREF_ACCESS_TOKEN, null);
 
-        // Best-effort token revocation; ignore errors
-        if (accessToken != null && !accessToken.isEmpty()) {
-            LogoutRequestTask lrt = new LogoutRequestTask(getContext());
-            lrt.logout(accessToken, new LogoutRequestTask.VolleyCallback() {
-                @Override
-                public void onSuccess(String response) {
-                    dLog("LOGOUT", "Token revoked");
-                }
-
-                @Override
-                public void onError(VolleyError error) {
-                    dLog("LOGOUT", "Revocation failed: " + error.getMessage());
-                }
-            });
-        }
-
-        // Clear tokens and in-memory data
-        // Use AuthManager to clear both SharedPreferences and in-memory cache
+        // Clear the stored Sauce+ session cookie / User-Agent.
         AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), prefs);
         authManager.clearTokens();
+
+        // Also clear the WebView cookie jar, otherwise WebLoginActivity replays the old
+        // sails.sid / cf_clearance and the user can't sign in as a different account.
+        android.webkit.CookieManager.getInstance().removeAllCookies(null);
+        android.webkit.CookieManager.getInstance().flush();
 
         // Clear all in-memory data structures
         subscriptions.clear();

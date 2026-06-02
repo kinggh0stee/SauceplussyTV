@@ -524,7 +524,9 @@ class HydravionClient private constructor(private val context: Context, private 
     companion object {
 
         private const val TAG = "HydravionClient"
-        private const val SITE = "https://www.floatplane.com"
+        // Sauce+ is a white-label Floatplane instance; the /api/v3 contract is identical,
+        // only the host changes. See CLAUDE.md "Auth model" / reference/RECON.md.
+        private const val SITE = "https://www.sauceplus.com"
 
         // Updated to v3 API
         private const val URI_SUBSCRIPTIONS = "$SITE/api/v3/user/subscriptions"

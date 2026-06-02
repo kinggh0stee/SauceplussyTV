@@ -5,11 +5,24 @@ import com.android.volley.*
 import com.android.volley.toolbox.JsonRequest
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
+import ml.bmlzootown.hydravion.authenticate.AuthManager
 
 class RequestTask(context: Context) {
 
     private val volleyQueue: RequestQueue = Volley.newRequestQueue(context)
-    val version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME
+
+    // Sauce+ uses cookie-session auth behind Cloudflare. Each request sends the session
+    // Cookie header (passed in as [sessionCookie]) plus the WebView's User-Agent, which
+    // must match the one that obtained cf_clearance.
+    private fun authHeaders(sessionCookie: String, contentType: String? = null): Map<String, String> {
+        val headers = linkedMapOf(
+            "Accept" to ACCEPT_JSON,
+            "User-Agent" to AuthManager.peekUserAgent()
+        )
+        if (sessionCookie.isNotEmpty()) headers["Cookie"] = sessionCookie
+        if (contentType != null) headers["Content-Type"] = contentType
+        return headers
+    }
 
     fun getReponseStatus(uri: String?, callback: VolleyCallback) {
         var responseCode: Int = 0;
@@ -42,12 +55,7 @@ class RequestTask(context: Context) {
                 error.printStackTrace()
                 callback.onError(error)
             }) {
-            override fun getHeaders(): Map<String, String> =
-                mapOf(
-                    "Authorization" to "Bearer $accessToken",
-                    "Accept" to "application/json",
-                    "User-Agent" to "Hydravion (AndroidTV $version)"
-                )
+            override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
         volleyQueue.add(stringRequest)
     }
@@ -67,12 +75,7 @@ class RequestTask(context: Context) {
             override fun getParams(): Map<String, String>? = params
 
             @Throws(AuthFailureError::class)
-            override fun getHeaders(): Map<String, String> =
-                mapOf(
-                    "Authorization" to "Bearer $accessToken",
-                    "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version)"
-                )
+            override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
         volleyQueue.add(stringRequest)
     }
@@ -90,13 +93,7 @@ class RequestTask(context: Context) {
             }) {
 
             @Throws(AuthFailureError::class)
-            override fun getHeaders(): Map<String, String> =
-                mapOf(
-                    "Authorization" to "Bearer $accessToken",
-                    "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version)",
-                    "Content-Type" to "application/json"
-                )
+            override fun getHeaders(): Map<String, String> = authHeaders(accessToken, ACCEPT_JSON)
 
             override fun getBodyContentType(): String = "application/json"
 
@@ -117,12 +114,7 @@ class RequestTask(context: Context) {
                 callback.onError(error)
             }) {
 
-            override fun getHeaders(): Map<String, String> =
-                mapOf(
-                    "Authorization" to "Bearer $accessToken",
-                    "Accept" to ACCEPT_JSON,
-                    "User-Agent" to "Hydravion (AndroidTV $version)"
-                )
+            override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
         volleyQueue.add(stringRequest)
     }

@@ -23,12 +23,12 @@ import java.util.*
 
 class SocketClient private constructor(private val context: Context, private val mainPrefs: SharedPreferences) {
 
-    val version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME
     private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
 
      // Initialize the WebSocket connection, ensuring we use a fresh access token.
     fun initialize(onReady: (Socket?) -> Unit) {
-        authManager.withValidAccessToken({ token ->
+        // Gate on being logged in; the live Cookie/User-Agent are read at request time below.
+        authManager.withValidAccessToken({ _ ->
             val okHttpClient = OkHttpClient.Builder().build()
             IO.setDefaultOkHttpWebSocketFactory(okHttpClient)
             IO.setDefaultOkHttpCallFactory(okHttpClient)
@@ -50,12 +50,14 @@ class SocketClient private constructor(private val context: Context, private val
                 transport.on(Transport.EVENT_REQUEST_HEADERS) {
                     // Request Headers
                     val headers = it[0] as MutableMap<String, List<String>>
-                    // Always use the latest access token
-                    val currentToken = authManager.getAccessToken()
-                    headers["Origin"] = listOf("https://www.floatplane.com")
-                    headers["Authorization"] = listOf("Bearer $currentToken")
-                    headers["User-Agent"] = listOf("Hydravion (AndroidTV $version)")
-                    MainFragment.dLog("$TAG --> MODIFYING HEADERS", headers.toString())
+                    // Sauce+ cookie-session auth: send the session Cookie + matching User-Agent.
+                    val currentCookie = authManager.getSessionCookie()
+                    headers["Origin"] = listOf(SITE)
+                    headers["Cookie"] = listOf(currentCookie)
+                    headers["User-Agent"] = listOf(authManager.getUserAgent())
+                    // Never log the Cookie value — it is the entire session credential.
+                    val redacted = headers.mapValues { (k, v) -> if (k == "Cookie") "[redacted]" else v.toString() }
+                    MainFragment.dLog("$TAG --> MODIFYING HEADERS", redacted.toString())
                 }
                 transport.on(Transport.EVENT_RESPONSE_HEADERS){
                     // Response Headers
@@ -90,7 +92,8 @@ class SocketClient private constructor(private val context: Context, private val
     companion object {
 
         private const val TAG = "SocketClient"
-        private const val SOCKET_URI = "https://www.floatplane.com"
+        private const val SITE = "https://www.sauceplus.com"
+        private const val SOCKET_URI = SITE
         @SuppressLint("StaticFieldLeak")
         private var INSTANCE: SocketClient? = null
 

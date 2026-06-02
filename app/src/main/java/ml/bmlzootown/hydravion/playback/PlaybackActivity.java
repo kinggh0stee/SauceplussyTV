@@ -270,10 +270,11 @@ public class PlaybackActivity extends FragmentActivity {
             playerView.setPlayer(player);
 
             DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-            String version = ml.bmlzootown.hydravion.BuildConfig.VERSION_NAME;
+            // Sauce+ cookie-session auth: pass the session Cookie + matching User-Agent so the
+            // CDN/Cloudflare accept the request. (accessToken carries the Cookie header value.)
             HashMap<String, String> headers = new HashMap<>();
-            headers.put("Authorization", "Bearer " + accessToken);
-            headers.put("User-Agent", "Hydravion (AndroidTV " + version + ")");
+            headers.put("Cookie", accessToken);
+            headers.put("User-Agent", authManager.getUserAgent());
             dataSourceFactory.setDefaultRequestProperties(headers);
 
             int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;

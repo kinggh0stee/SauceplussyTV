@@ -60,7 +60,8 @@
             android:name=".playback.PlaybackActivity"
             android:exported="false" />
         <activity
-            android:name=".authenticate.QrLoginActivity"
+            android:name=".authenticate.WebLoginActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="false"
             android:noHistory="true" />
     </application>
