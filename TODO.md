@@ -18,14 +18,14 @@
 
 ### Dependency Updates
 - **AndroidX Leanback:** 1.0.0 → latest
-- **Glide:** 4.12.0 → latest
-- **Gson:** 2.8.9 → latest
+- ~~**Glide:** done (4.16.0)~~
+- ~~**Gson:** done (2.11.0)~~
 - ~~**ZXing:** removed (QR features unused since Keycloak rewrite)~~
-- **OkHttp:** 5.0.0-alpha.2 → stable 4.x or latest 5.x
+- ~~**OkHttp:** done (4.12.0 stable)~~
 - **Volley:** 1.2.1 → latest
 
 ### Build & Tooling
-- **CompileSdk:** 34 → 35/36
+- ~~**CompileSdk:** done (35)~~
 - **Add unit tests:** Currently none exist
 - **CI/CD:** GitHub Actions for automated builds
 
@@ -61,7 +61,7 @@
 
 - [x] Gradle 8.13 → 9.4.1
 - [x] Android Gradle Plugin 8.13.1 → 9.2.1
-- [x] Kotlin 1.6.21 → 2.0.21
+- [x] Kotlin 1.6.21 → 2.1.10
 - [x] ExoPlayer 2.17.1 → 2.19.1
 - [x] Auth rewrite: Keycloak OIDC → WebView cookie-session
 - [x] API host: floatplane.com → sauceplus.com
