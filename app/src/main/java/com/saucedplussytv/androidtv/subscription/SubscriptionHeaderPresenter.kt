@@ -33,7 +33,7 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
         (item as? ListRow)?.headerItem?.name?.let { name ->
             viewHolder.view?.let { subView ->
                 if (name == subView.context.getString(R.string.settings)) {
-                    subView.findViewById<ImageView>(R.id.header_icon).setImageResource(R.drawable.exo_ic_settings)
+                    subView.findViewById<ImageView>(R.id.header_icon).setImageResource(R.drawable.ic_settings)
                     subView.findViewById<TextView>(R.id.header_sub).text = name
                 } else {
                     subView.findViewById<TextView>(R.id.header_sub).text = name
