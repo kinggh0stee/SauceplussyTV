@@ -10,7 +10,6 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -317,7 +316,7 @@ public class MainFragment extends BrowseSupportFragment {
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
 
-        // Restart the QR login flow instead of closing the app
+        // Restart the web login flow instead of closing the app
         checkLogin();
     }
 
@@ -726,9 +725,6 @@ public class MainFragment extends BrowseSupportFragment {
             BackgroundManager mBackgroundManager = BackgroundManager.getInstance(requireActivity());
             mBackgroundManager.attach(requireActivity().getWindow());
             backgroundManagerPrepared = true;
-            
-            DisplayMetrics mMetrics = new DisplayMetrics();
-            requireActivity().getWindowManager().getDefaultDisplay().getMetrics(mMetrics);
         } catch (IllegalStateException e) {
             // BackgroundManager is already attached, which is fine
             dLog(TAG, "BackgroundManager already attached: " + e.getMessage());

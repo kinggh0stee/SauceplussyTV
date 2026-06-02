@@ -20,7 +20,7 @@
 - **AndroidX Leanback:** 1.0.0 → latest
 - **Glide:** 4.12.0 → latest
 - **Gson:** 2.8.9 → latest
-- **ZXing:** Consider if QR features still needed (currently unused)
+- ~~**ZXing:** removed (QR features unused since Keycloak rewrite)~~
 - **OkHttp:** 5.0.0-alpha.2 → stable 4.x or latest 5.x
 - **Volley:** 1.2.1 → latest
 
