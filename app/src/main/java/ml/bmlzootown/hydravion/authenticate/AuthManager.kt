@@ -49,14 +49,14 @@ class AuthManager private constructor(
                 Constants.PREF_USER_AGENT,
                 userAgent.takeIf { it.isNotEmpty() } ?: DEFAULT_USER_AGENT
             )
-            .commit()
+            .apply()
     }
 
     fun clearTokens() {
         prefs.edit()
             .remove(Constants.PREF_SESSION_COOKIE)
             .remove(Constants.PREF_USER_AGENT)
-            .commit()
+            .apply()
     }
 
     /**

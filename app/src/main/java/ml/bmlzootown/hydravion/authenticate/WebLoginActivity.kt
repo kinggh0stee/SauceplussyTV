@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
@@ -15,6 +17,7 @@ import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import android.widget.Toast
 import ml.bmlzootown.hydravion.R
+import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
@@ -105,7 +108,9 @@ class WebLoginActivity : Activity() {
         if (completed || url == null) return
         val uri = Uri.parse(url)
         val host = uri.host ?: return
-        if (!host.endsWith(HOST)) return
+        // Exact host match only — endsWith() would accept lookalikes ("notsauceplus.com")
+        // and arbitrary subdomains ("evil.sauceplus.com").
+        if (host != HOST && host != "www.$HOST") return
         if (!isAppRoute(uri.path)) return
 
         val cookieHeader = CookieManager.getInstance().getCookie(SITE)
@@ -121,6 +126,10 @@ class WebLoginActivity : Activity() {
      */
     private fun verifyAndFinish(cookieHeader: String, userAgent: String) {
         if (completed || !verifying.compareAndSet(false, true)) return
+        // Hold only a WeakReference + a Looper-bound Handler so an in-flight verification
+        // (up to 15s) never pins this Activity in memory if the user backs out / it's destroyed.
+        val activityRef = WeakReference(this)
+        val handler = Handler(Looper.getMainLooper())
         Thread {
             var authed = false
             var conn: HttpURLConnection? = null
@@ -141,22 +150,25 @@ class WebLoginActivity : Activity() {
                 conn?.disconnect()
             }
 
-            runOnUiThread {
-                if (authed && !completed) {
-                    completed = true
+            val ok = authed
+            handler.post {
+                val activity = activityRef.get()
+                if (activity == null || activity.isFinishing || activity.isDestroyed) return@post
+                if (ok && !activity.completed) {
+                    activity.completed = true
                     CookieManager.getInstance().flush()
                     Log.d(TAG, "Login verified; harvested session cookie")
-                    setResult(
+                    activity.setResult(
                         RESULT_OK,
                         Intent().apply {
                             putExtra(EXTRA_SESSION_COOKIE, cookieHeader)
                             putExtra(EXTRA_USER_AGENT, userAgent)
                         }
                     )
-                    finish()
+                    activity.finish()
                 } else {
                     // Not authenticated yet (anonymous session / CF page) — allow a later retry.
-                    verifying.set(false)
+                    activity.verifying.set(false)
                 }
             }
         }.start()
