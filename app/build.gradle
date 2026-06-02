@@ -64,15 +64,17 @@ dependencies {
 
     // Network
     implementation 'com.android.volley:volley:1.2.1'
-    implementation 'com.google.code.gson:gson:2.8.9'
-    implementation 'com.squareup.okhttp3:okhttp:5.0.0-alpha.2'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation('io.socket:socket.io-client:1.0.1') {
         // excluding org.json which is provided by Android
         exclude group: 'org.json', module: 'json'
+        // exclude socket.io-client's transitive okhttp 3.x; we supply 4.12.0 explicitly above
+        exclude group: 'com.squareup.okhttp3', module: 'okhttp'
     }
 
     // UI
-    implementation 'com.github.bumptech.glide:glide:4.12.0'
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation 'org.ocpsoft.prettytime:prettytime:5.0.0.Final'
 
     // ExoPlayer
