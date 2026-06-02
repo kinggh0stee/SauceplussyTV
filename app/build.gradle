@@ -1,13 +1,13 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.saucedplussytv.androidtv"
 
         minSdkVersion = 26
-        targetSdkVersion = 34
+        targetSdkVersion = 35
         versionCode 6
         versionName "1.5.6"
 

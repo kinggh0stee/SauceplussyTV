@@ -67,6 +67,7 @@ import com.saucedplussytv.androidtv.models.VideoInfo;
 import com.saucedplussytv.androidtv.models.VideoProgress;
 import com.saucedplussytv.androidtv.playback.PlaybackActivity;
 import com.saucedplussytv.androidtv.subscription.Subscription;
+import com.saucedplussytv.androidtv.post.VideoAttachments;
 import com.saucedplussytv.androidtv.subscription.SubscriptionHeaderPresenter;
 
 public class MainFragment extends BrowseSupportFragment {
@@ -369,6 +370,7 @@ public class MainFragment extends BrowseSupportFragment {
                                     })
                             .create()
                             .show();
+                    return Unit.INSTANCE;
                 }
                 gotSubscriptions(subscriptions);
             }
@@ -790,12 +792,24 @@ public class MainFragment extends BrowseSupportFragment {
                 intent.putExtra(DetailsActivity.Video, video);
                 requireActivity().startActivity(intent, bundle);
             } else {
-                client.getVideoInfo(video.getVideoId(), videoInfo -> {
-                    String res = getHighestSupportedRes(videoInfo);
-                    client.getVideo(video, res, newVideo -> {
-                        newVideo.setVideoInfo(videoInfo);
-                        intent.putExtra(DetailsActivity.Video, newVideo);
-                        startActivityForResult(intent, Constants.REQ_CODE_DETAIL, bundle);
+                // getVideoId() returns attachmentOrder[0] from the list response, which may be
+                // absent or may contain a non-video attachment ID. getPost gives us the canonical
+                // videoAttachments[0].guid that /api/v3/content/video and /api/v3/delivery/info
+                // actually require — the same lookup VideoDetailsFragment.ACTION_RES already uses.
+                client.getPost(video.getGuid(), post -> {
+                    List<VideoAttachments> attachments = post.getVideoAttachments();
+                    if (attachments == null || attachments.isEmpty()) return Unit.INSTANCE;
+                    String videoId = attachments.get(0).getGuid();
+                    // Patch so getVideo's entityId param is also correct
+                    video.setAttachmentIds(new String[]{ videoId });
+                    client.getVideoInfo(videoId, videoInfo -> {
+                        String res = getHighestSupportedRes(videoInfo);
+                        client.getVideo(video, res, newVideo -> {
+                            newVideo.setVideoInfo(videoInfo);
+                            intent.putExtra(DetailsActivity.Video, newVideo);
+                            startActivityForResult(intent, Constants.REQ_CODE_DETAIL, bundle);
+                            return Unit.INSTANCE;
+                        });
                         return Unit.INSTANCE;
                     });
                     return Unit.INSTANCE;

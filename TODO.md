@@ -26,7 +26,6 @@
 
 ### Build & Tooling
 - **CompileSdk:** 34 → 35/36
-- **Remove Jetifier:** Currently `android.enableJetifier=true` in gradle.properties. Once all deps are AndroidX-native, remove this
 - **Add unit tests:** Currently none exist
 - **CI/CD:** GitHub Actions for automated builds
 

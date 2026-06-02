@@ -49,6 +49,7 @@ class SocketClient private constructor(private val context: Context, private val
                 val transport: Transport = args[0] as Transport
                 transport.on(Transport.EVENT_REQUEST_HEADERS) {
                     // Request Headers
+                    @Suppress("UNCHECKED_CAST")
                     val headers = it[0] as MutableMap<String, List<String>>
                     // Sauce+ cookie-session auth: send the session Cookie + matching User-Agent.
                     val currentCookie = authManager.getSessionCookie()
@@ -61,6 +62,7 @@ class SocketClient private constructor(private val context: Context, private val
                 }
                 transport.on(Transport.EVENT_RESPONSE_HEADERS){
                     // Response Headers
+                    @Suppress("UNCHECKED_CAST")
                     val headers = it[0] as Map<String, List<String>>
                     MainFragment.dLog("$TAG --> RESPONSE HEADERS", headers.toString())
                 }

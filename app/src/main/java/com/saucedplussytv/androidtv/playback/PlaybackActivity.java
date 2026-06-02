@@ -170,6 +170,8 @@ public class PlaybackActivity extends FragmentActivity {
         return playerView.dispatchKeyEvent(event) || super.dispatchKeyEvent(event);
     }
 
+    @Deprecated
+    @SuppressWarnings("deprecation")
     @Override
     public void onBackPressed() {
         // Hide the menu

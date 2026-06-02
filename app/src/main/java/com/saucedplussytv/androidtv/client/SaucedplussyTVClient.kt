@@ -123,7 +123,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                     callback(Gson().fromJson(response, Array<Video>::class.java))
                 }
 
-                override fun onError(error: VolleyError) = Unit
+                override fun onError(error: VolleyError) = callback(emptyArray())
             })
         }, {
             callback(emptyArray())
