@@ -544,7 +544,7 @@ class HydravionClient private constructor(private val context: Context, private 
         private const val URI_GET_PROGRESS = "$SITE/api/v3/content/get/progress"
         private const val URI_UPDATE_PROGRESS = "$SITE/api/v3/content/progress"
 
-        private const val LATEST = "https://api.github.com/repos/bmlzootown/Hydravion-AndroidTV/releases/latest"
+        private const val LATEST = "https://api.github.com/repos/kinggh0stee/Sauce-AndroidTV/releases/latest"
         private var INSTANCE: HydravionClient? = null
 
         @Synchronized

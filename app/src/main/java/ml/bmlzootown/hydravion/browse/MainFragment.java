@@ -112,14 +112,14 @@ public class MainFragment extends BrowseSupportFragment {
             if (new Version(version).isLowerThan(v.substring(1))) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle("Update Available");
-                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/bmlzootown/Hydravion-AndroidTV/releases");
+                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/kinggh0stee/Sauce-AndroidTV/releases");
                 builder.setPositiveButton("OKAY", null);
                 builder.create().show();
             }
             /*if (!version.equalsIgnoreCase(v.substring(1))) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle("Update Available");
-                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/bmlzootown/Hydravion-AndroidTV/releases");
+                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/kinggh0stee/Sauce-AndroidTV/releases");
                 builder.setPositiveButton("OKAY", null);
                 builder.create().show();
             }*/
@@ -348,7 +348,7 @@ public class MainFragment extends BrowseSupportFragment {
             if (subscriptions == null) {
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
-                        .setMessage("Your Floatplane session has expired. Please relink your account.")
+                        .setMessage("Your Sauce+ session has expired. Please relink your account.")
                         .setPositiveButton("Relink",
                                 (dialog, which) -> {
                                     dialog.dismiss();
@@ -362,7 +362,7 @@ public class MainFragment extends BrowseSupportFragment {
                 if (subscriptions.length == 0) {
                     new AlertDialog.Builder(getContext())
                             .setTitle("No Subscriptions Found")
-                            .setMessage("Must be subscribed to a creator to utilize this app -- see official Floatplane website.")
+                            .setMessage("Must be subscribed to a creator to utilize this app -- see official Sauce+ website.")
                             .setPositiveButton("OK",
                                     (dialog, which) -> {
                                         dialog.dismiss();
@@ -832,7 +832,7 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void showInfo() {
         new AlertDialog.Builder(getContext())
-                .setTitle("Hydravion (AndroidTV)")
+                .setTitle("Sauce+ (AndroidTV)")
                 .setMessage("Version: " + version + "\n\n" +
                         "Contributors:\n" +
                         "- bmlzootown\n" +
