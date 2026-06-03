@@ -25,6 +25,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
     private val requestTask: RequestTask = RequestTask(context)
     private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
+    private val gson = Gson()
 
     fun getSubs(callback: (Array<Subscription>?) -> Unit) {
         authManager.withValidAccessToken({ token ->
@@ -44,17 +45,15 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                     return
                 }
 
-                Gson().fromJson(response, Array<Subscription>::class.java).let { subs ->
+                gson.fromJson(response, Array<Subscription>::class.java).let { subs ->
                     subs.forEach { sub ->
                         sub.creator?.let { creatorId ->
                             creatorIds[sub.plan?.title.toString()] = creatorId
-
-                            if (creatorCache[creatorId] == null) {
-                                cacheLogo(creatorId, null)
-                            }
-
-                            getCreatorInfo(creatorId) {
-                                sub.streamInfo = it
+                            // Single request handles both logo caching and stream-info retrieval.
+                            // getCreatorById uses the cache on repeat calls, avoiding duplicate
+                            // requests when getSubs is called multiple times (e.g. on refresh).
+                            getCreatorById(creatorId) { creator ->
+                                sub.streamInfo = creator?.lastLiveStream
                             }
                         }
                     }
@@ -83,10 +82,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                     }
 
                     try {
-                        // v3 API returns a single object, not an array
-                        Gson().fromJson(response, Creator::class.java).let { creator ->
-                            creator.lastLiveStream?.let { it1 -> callback.invoke(it1) }
-                        }
+                        parseCreator(response)?.lastLiveStream?.let { callback.invoke(it) }
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -120,7 +116,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                         MainFragment.dLog(TAG, "getVideos: $response")
                     }
 
-                    callback(Gson().fromJson(response, Array<Video>::class.java))
+                    callback(gson.fromJson(response, Array<Video>::class.java))
                 }
 
                 override fun onError(error: VolleyError) = callback(emptyArray())
@@ -143,24 +139,35 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                         MainFragment.dLog(TAG, "getVideo: $response")
                     }
 
-                    val delivery = Gson().fromJson(response, Delivery::class.java)
-                    //val resolution = if (res != "2160") res else "4K"
-                    val cdn = delivery.groups.get(0).origins.get(0).url
-                    var uri = ""
-                    val variants = (delivery.groups.get(0).variants).sortedWith(
-                        compareByDescending<Variant> {
-                            when (it.name) {
-                                "2160-avc1" -> 5
-                                "1080-avc1" -> 4
-                                "720-avc1" -> 3
-                                "480-avc1" -> 2
-                                "360-avc1" -> 1
-                                else -> 0
-                            }
+                    val delivery = gson.fromJson(response, Delivery::class.java)
+                    val groups = delivery?.groups
+                    if (groups.isNullOrEmpty() || groups[0].origins.isNullOrEmpty()) {
+                        MainFragment.dLog(TAG, "getVideo: no delivery groups or origins")
+                        callback(video)
+                        return
+                    }
+                    val cdn = groups[0].origins[0].url
+                    val maxRes = res.toIntOrNull() ?: Int.MAX_VALUE
+                    val variants = (groups[0].variants ?: emptyList())
+                        .filter { v ->
+                            val vRes = v.name?.substringBefore("-")?.toIntOrNull() ?: 0
+                            vRes <= maxRes
                         }
-                    )
+                        .sortedWith(
+                            compareByDescending<Variant> {
+                                when (it.name) {
+                                    "2160-avc1" -> 5
+                                    "1080-avc1" -> 4
+                                    "720-avc1" -> 3
+                                    "480-avc1" -> 2
+                                    "360-avc1" -> 1
+                                    else -> 0
+                                }
+                            }
+                        )
 
-                    for(variant in variants) {
+                    var uri = ""
+                    for (variant in variants) {
                         MainFragment.dLog("VARIANT", variant.toString())
                         if (!variant.enabled) {
                             MainFragment.dLog("VARIANT", variant.label + " DISABLED")
@@ -169,6 +176,11 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                             uri = variant.url
                             break
                         }
+                    }
+                    if (uri.isEmpty()) {
+                        MainFragment.dLog(TAG, "getVideo: no enabled variant found")
+                        callback(video)
+                        return
                     }
                     video.vidUrl = cdn + uri
                     MainFragment.dLog(TAG, "Video: $video")
@@ -179,10 +191,10 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
-                override fun onError(error: VolleyError) = Unit
+                override fun onError(error: VolleyError) = callback(video)
             })
         }, {
-            // no-op
+            callback(video)
         })
     }
 
@@ -195,7 +207,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                 object : RequestTask.VolleyCallback {
                 override fun onSuccess(response: String) {
                     try {
-                        callback(Gson().fromJson(response, Video::class.java))
+                        callback(gson.fromJson(response, Video::class.java))
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -222,7 +234,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccess(response: String) {
                     try {
-                        callback(Gson().fromJson(response, VideoInfo::class.java))
+                        callback(gson.fromJson(response, VideoInfo::class.java))
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -247,13 +259,9 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                 object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
-                    val c: Creator = Gson().fromJson(response, Creator::class.java)
-                    c.lastLiveStream?.let {
-                        getLive(it.id) {
-                            callback(it)
-                        }
+                    parseCreator(response)?.lastLiveStream?.let { liveStream ->
+                        getLive(liveStream.id) { callback(it) }
                     }
-                    //callback(Gson().fromJson(response, Creator::class.java))
                 }
 
                 override fun onResponseCode(response: Int) = Unit
@@ -275,7 +283,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
                 object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
-                    callback(Gson().fromJson(response, Delivery::class.java))
+                    callback(gson.fromJson(response, Delivery::class.java))
                 }
 
                 override fun onResponseCode(response: Int) = Unit
@@ -349,8 +357,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccess(response: String) {
                     try {
-                        // v3 API returns a single object, not an array
-                        Gson().fromJson(response, Creator::class.java).let { creator ->
+                        parseCreator(response)?.let { creator ->
                             creatorCache[creatorGUID] = creator
                             callback?.invoke(creator)
                         }
@@ -370,6 +377,16 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
         })
     }
 
+    /** Parses a Creator from a response that may be a single object or a one-element array. */
+    private fun parseCreator(response: String): Creator? = try {
+        if (response.trimStart().startsWith("["))
+            gson.fromJson(response, Array<Creator>::class.java).firstOrNull()
+        else
+            gson.fromJson(response, Creator::class.java)
+    } catch (e: Exception) {
+        null
+    }
+
     fun getPost(postId: String, callback: (Post) -> Unit) {
         authManager.withValidAccessToken({ token ->
             requestTask.sendRequest(
@@ -380,7 +397,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccess(response: String) {
                     try {
-                        callback(Gson().fromJson(response, Post::class.java))
+                        callback(gson.fromJson(response, Post::class.java))
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -404,7 +421,7 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
             override fun onSuccess(response: String) {
 
                 try {
-                    callback(Gson().fromJson(response, Release::class.java).tag_name)
+                    callback(gson.fromJson(response, Release::class.java).tag_name)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }

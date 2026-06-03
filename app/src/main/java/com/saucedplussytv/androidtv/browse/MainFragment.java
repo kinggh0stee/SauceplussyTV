@@ -73,7 +73,7 @@ import com.saucedplussytv.androidtv.subscription.SubscriptionHeaderPresenter;
 public class MainFragment extends BrowseSupportFragment {
 
     private static final String TAG = "MainFragment";
-    public static boolean debug = true;
+    public static boolean debug = BuildConfig.DEBUG;
 
     private SaucedplussyTVClient client;
     private final String version = BuildConfig.VERSION_NAME;
@@ -82,13 +82,12 @@ public class MainFragment extends BrowseSupportFragment {
     private Socket socket;
     private final Gson gson = new Gson();
 
-    public static List<Subscription> subscriptions = new ArrayList<>();
-    private static NavigableMap<Integer, Video> strms = new TreeMap<>();
-    public static HashMap<String, ArrayList<Video>> videos = new HashMap<>();
-    public static BrowseSupportFragment bsf;
+    private List<Subscription> subscriptions = new ArrayList<>();
+    private NavigableMap<Integer, Video> strms = new TreeMap<>();
+    private HashMap<String, ArrayList<Video>> videos = new HashMap<>();
     private List<VideoProgress> videoProgress = new ArrayList<>();
     private int subCount;
-    private int page = 1;
+    private final HashMap<String, Integer> creatorPages = new HashMap<>();
 
     private int rowSelected;
     private int colSelected;
@@ -99,16 +98,18 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
     private boolean adapterInitialized = false;
+    private int loadGeneration = 0;
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        bsf = this;
         client = SaucedplussyTVClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
         socketClient = SocketClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
         checkLogin();
 
         client.getLatest(v -> {
+            if (!isAdded() || getContext() == null) return Unit.INSTANCE;
+            if (v == null || v.length() < 2) return Unit.INSTANCE;
             if (new Version(version).isLowerThan(v.substring(1))) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle("Update Available");
@@ -172,6 +173,17 @@ public class MainFragment extends BrowseSupportFragment {
         }
     }
 
+    @Override
+    public void onDestroyView() {
+        liveHandler.removeCallbacksAndMessages(null);
+        if (socket != null) {
+            socket.disconnect();
+            socket.off();
+            socket = null;
+        }
+        super.onDestroyView();
+    }
+
     private void initialize() {
         refreshSubscriptions();
         prepareBackgroundManager();
@@ -233,33 +245,39 @@ public class MainFragment extends BrowseSupportFragment {
     private final Emitter.Listener onSyncEvent = args -> {
         JSONObject obj = (JSONObject) args[0];
         SyncEvent event = socketClient.parseSyncEvent(obj);
+        if (event == null || event.getEvent() == null || event.getData() == null) return;
         String e = gson.toJson(event);
         dLog("SOCKET", e);
-        if (event.getEvent().equalsIgnoreCase("creatorNotification")) {
+        if ("creatorNotification".equalsIgnoreCase(event.getEvent())) {
             dLog("SOCKET", "creatorNotification");
-            if (event.getData().getEventType().equalsIgnoreCase("CONTENT_LIVESTREAM_START")) {
+            String eventType = event.getData().getEventType();
+            if (eventType == null) return;
+            if (eventType.equalsIgnoreCase("CONTENT_LIVESTREAM_START")) {
                 dLog("SOCKET", "CONTENT_LIVESTREAM_START");
+                if (event.getData().getCreator() == null) return;
                 Integer row = getRow(event.getData().getCreator(), subscriptions);
                 Thumbnail th = new Thumbnail();
                 th.setPath(event.getData().getIcon());
                 if (strms.containsKey(row))
                     strms.get(row).setThumbnail(th);
 
-                if (row != -1) {
-                    if (strms.containsKey(row)) {
-                        getActivity().runOnUiThread(() -> {
-                            addToRow(strms.get(row), subscriptions);
-                        });
+                if (row != -1 && strms.containsKey(row)) {
+                    android.app.Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> addToRow(strms.get(row), subscriptions));
                     }
                 }
-            } else if (event.getData().getEventType().equalsIgnoreCase("CONTENT_POST_RELEASE")) {
+            } else if (eventType.equalsIgnoreCase("CONTENT_POST_RELEASE")) {
                 dLog("SOCKET", "CONTENT_POST_RELEASE");
+                if (event.getData().getVideo() == null
+                        || event.getData().getVideo().getGuid() == null) return;
                 client.getVideoObject(event.getData().getVideo().getGuid(), video -> {
                     int row = getRow(video, subscriptions);
                     if (row != -1) {
-                        getActivity().runOnUiThread(() -> {
-                            addToRow(video, subscriptions);
-                        });
+                        android.app.Activity activity = getActivity();
+                        if (activity != null) {
+                            activity.runOnUiThread(() -> addToRow(video, subscriptions));
+                        }
                     }
                     return Unit.INSTANCE;
                 });
@@ -285,10 +303,10 @@ public class MainFragment extends BrowseSupportFragment {
         videos.clear();
         strms.clear();
         videoProgress.clear();
+        creatorPages.clear();
         
         // Reset state variables
         subCount = 0;
-        page = 1;
         rowSelected = 0;
         colSelected = 0;
         liveIndex = -1;
@@ -310,10 +328,13 @@ public class MainFragment extends BrowseSupportFragment {
         
         // Reset adapter initialization flag
         adapterInitialized = false;
-        
+
         // Reset UI initialization flag to allow proper setup on next login
         uiInitialized = false;
-        
+
+        // Invalidate any in-flight getVideos callbacks from the previous session
+        loadGeneration++;
+
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
 
@@ -327,7 +348,13 @@ public class MainFragment extends BrowseSupportFragment {
             dLog(TAG, "Ignoring live info update - user is logged out");
             return;
         }
-        
+
+        if (live.getGroups() == null || live.getGroups().isEmpty()
+                || live.getGroups().get(0).getOrigins() == null || live.getGroups().get(0).getOrigins().isEmpty()
+                || live.getGroups().get(0).getVariants() == null || live.getGroups().get(0).getVariants().isEmpty()) {
+            dLog(TAG, "gotLiveInfo: incomplete delivery response, skipping");
+            return;
+        }
         String l = live.getGroups().get(0).getOrigins().get(0).getUrl() + live.getGroups().get(0).getVariants().get(0).getUrl();
         sub.setStreamUrl(l);
         client.checkLive(l, (status) -> {
@@ -344,7 +371,10 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshSubscriptions() {
+        final int gen = loadGeneration;
         client.getSubs(subscriptions -> {
+            if (loadGeneration != gen) return Unit.INSTANCE;
+            if (!isAdded() || getContext() == null) return Unit.INSTANCE;
             if (subscriptions == null) {
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
@@ -380,6 +410,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotSubscriptions(Subscription[] subs) {
+        if (!isAdded() || getActivity() == null) return;
         // Guard against processing subscriptions if we're logged out
         if (!isLoggedIn) {
             dLog(TAG, "Ignoring subscription update - user is logged out");
@@ -397,19 +428,24 @@ public class MainFragment extends BrowseSupportFragment {
             }
         }
         subscriptions = trimmed;
+        final int gen = loadGeneration;
+        int pending = 0;
         for (Subscription sub : subscriptions) {
             if (sub.getCreator() != null) {
+                pending++;
                 client.getLive(sub, live -> {
+                    if (loadGeneration != gen) return Unit.INSTANCE;
                     gotLiveInfo(sub, live);
                     return Unit.INSTANCE;
                 });
                 client.getVideos(sub.getCreator(), 1, videos -> {
+                    if (loadGeneration != gen) return Unit.INSTANCE;
                     gotVideos(sub.getCreator(), videos);
                     return Unit.INSTANCE;
                 });
             }
         }
-        subCount = trimmed.size();
+        subCount = pending;
         dLog("ROWS", trimmed.size() + "");
     }
 
@@ -424,12 +460,13 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void gotVideos(String creatorGUID, Video[] vids) {
-        // Guard against processing videos if we're logged out
+        if (!isAdded() || getActivity() == null) return;
         if (!isLoggedIn) {
             dLog(TAG, "Ignoring video update - user is logged out");
             return;
         }
-        
+        if (vids == null) return;
+
         boolean isPagination = adapterInitialized && videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0;
         int previousSize = (videos.get(creatorGUID) != null) ? videos.get(creatorGUID).size() : 0;
         
@@ -455,12 +492,13 @@ public class MainFragment extends BrowseSupportFragment {
             } else {
                 refreshVideoProgress();
                 subCount = subscriptions.size();
-                setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+                // Position is restored inside refreshRows() after setAdapter + startHeadersTransition
             }
         }
     }
 
     private void refreshVideoProgress() {
+        if (!isAdded() || getActivity() == null) return;
         // Guard against refreshing progress if we're logged out
         if (!isLoggedIn) {
             dLog(TAG, "Ignoring video progress refresh - user is logged out");
@@ -480,6 +518,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshRows() {
+        if (!isAdded() || getActivity() == null) return;
         // Guard against refreshing rows if we're logged out
         if (!isLoggedIn) {
             dLog(TAG, "Ignoring row refresh - user is logged out");
@@ -529,21 +568,24 @@ public class MainFragment extends BrowseSupportFragment {
                     strms.put(row, stream);
                     //streams.add(row, stream);
 
-                    // If streaming, append stream node to beginning of video list, else setup live check
-                    if (isStreaming) {
-                        dLog("STREAMING", "true");
-                        if (vids != null) {
-                            vids.add(0, stream);
-                        }
-                    }
+                    // stream card is prepended to the local rowVids snapshot below; don't mutate vids here
                 }
             }
 
             if (vids != null) {
-                vids.forEach(listRowAdapter::add);
+                // Build a local list so the shared videos map is never mutated here;
+                // mutating vids directly would prepend the stream card again on every refresh.
+                List<Video> rowVids = new ArrayList<>(vids);
+                if (isStreaming && sub.getStreamUrl() != null && sub.getStreamInfo() != null) {
+                    Video live = strms.get(getRow(sub.getCreator(), subscriptions));
+                    if (live != null) rowVids.add(0, live);
+                }
+                rowVids.forEach(listRowAdapter::add);
             }
 
-            HeaderItem header = new HeaderItem(i, sub.getPlan().getTitle());
+            String planTitle = (sub.getPlan() != null && sub.getPlan().getTitle() != null)
+                    ? sub.getPlan().getTitle() : "";
+            HeaderItem header = new HeaderItem(i, planTitle);
             rowsAdapter.add(new ListRow(header, listRowAdapter));
         }
 
@@ -561,14 +603,26 @@ public class MainFragment extends BrowseSupportFragment {
         gridRowAdapter.add(getResources().getString(R.string.logout));
         rowsAdapter.add(new ListRow(gridHeader, gridRowAdapter));
 
+        boolean isFirstBuild = !adapterInitialized;
         setAdapter(rowsAdapter);
         adapterInitialized = true;
+
+        if (isFirstBuild) {
+            // Transition focus from the headers panel into the content rows so D-pad
+            // left/right reaches video cards. Only needed on first build — re-running it
+            // on every refresh would fight the user's current focus position.
+            startHeadersTransition(false);
+
+            // Restore last known scroll position after the adapter is first built.
+            setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+        }
     }
 
     private void addLiveToRow(Integer row, Video stream, List<Subscription> subs) {
+        ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
+        if (rows == null) return;
         for (int i = 0; i < subs.size(); i++) {
             if (i == row) {
-                ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
                 ListRow lr = (ListRow) rows.get(i);
                 ArrayObjectAdapter vids = (ArrayObjectAdapter) lr.getAdapter();
                 vids.add(0, stream);
@@ -670,13 +724,14 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void addToRow(Video video, List<Subscription> subs) {
         dLog("addToRow", video.getGuid());
+        ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
+        if (rows == null) return;
         for (int i = 0; i < subs.size(); i++) {
             String creator = subs.get(i).getCreator();
             String vid = video.getCreator().getId();
-            assert creator != null;
+            if (creator == null) continue;
             if (creator.equalsIgnoreCase(vid)) {
                 dLog("addToRow", "Adding video to row " + i + ", creator " + creator);
-                ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
                 ListRow lr = (ListRow) rows.get(i);
                 ArrayObjectAdapter vids = (ArrayObjectAdapter) lr.getAdapter();
                 boolean addVid = true;
@@ -766,12 +821,23 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private Unit onRowSelected() {
-        subscriptions.forEach(sub -> {
-            client.getVideos(sub.getCreator(), page + 1, videos -> {
-                gotVideos(sub.getCreator(), videos);
-                return Unit.INSTANCE;
-            });
-            page++;
+        // Fetch the next page only for the creator whose row just hit the last item.
+        // (Previously fetched for all subscriptions and used a single page counter,
+        // skipping pages when more than one subscription is loaded.)
+        if (rowSelected < 0 || rowSelected >= subscriptions.size()) return Unit.INSTANCE;
+        String creator = subscriptions.get(rowSelected).getCreator();
+        if (creator == null) return Unit.INSTANCE;
+        int nextPage = creatorPages.getOrDefault(creator, 1) + 1;
+        final int gen = loadGeneration;
+        client.getVideos(creator, nextPage, vids -> {
+            if (loadGeneration != gen) return Unit.INSTANCE;
+            // Only advance the page counter when the request succeeds with data,
+            // so a network error doesn't permanently skip a page.
+            if (vids != null && vids.length > 0) {
+                creatorPages.put(creator, nextPage);
+            }
+            gotVideos(creator, vids);
+            return Unit.INSTANCE;
         });
         return Unit.INSTANCE;
     }
@@ -788,7 +854,7 @@ public class MainFragment extends BrowseSupportFragment {
                             DetailsActivity.SHARED_ELEMENT_NAME)
                     .toBundle();
 
-            if (video.getType().equalsIgnoreCase("live")) {
+            if ("live".equalsIgnoreCase(video.getType())) {
                 intent.putExtra(DetailsActivity.Video, video);
                 requireActivity().startActivity(intent, bundle);
             } else {
@@ -823,9 +889,11 @@ public class MainFragment extends BrowseSupportFragment {
     private Unit onSettingsSelected(@NonNull SettingsAction action) {
         switch (action) {
             case REFRESH:
+                loadGeneration++;
                 videos.clear();
-                adapterInitialized = false; // Reset flag on manual refresh
-                refreshSubscriptions(); // Refresh will get subs and videos again, then refresh row UI
+                creatorPages.clear();
+                adapterInitialized = false;
+                refreshSubscriptions();
                 break;
             case LOGOUT:
                 logout();
