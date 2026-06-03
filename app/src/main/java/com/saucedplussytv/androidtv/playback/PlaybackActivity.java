@@ -74,6 +74,10 @@ public class PlaybackActivity extends FragmentActivity {
 
         final Video video = (Video) getIntent().getSerializableExtra(DetailsActivity.Video);
         this.video = video;
+        if (video == null) {
+            finish();
+            return;
+        }
         url = video.getVidUrl();
 
         playerView = findViewById(R.id.exoplayer);
@@ -189,6 +193,7 @@ public class PlaybackActivity extends FragmentActivity {
 
     private void setupLikeAndDislike() {
         client.getPost(video.getId(), post -> {
+            if (post == null || post.getUserInteractions() == null) return Unit.INSTANCE;
             if (!post.getUserInteractions().isEmpty()) {
                 if (post.isLiked()) {
                     like.setImageResource(R.drawable.ic_like);
@@ -247,7 +252,7 @@ public class PlaybackActivity extends FragmentActivity {
             String msg = "Playback Speed: " + itemTitle;
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
 
-            player.setPlaybackSpeed(playbackSpeed);
+            if (player != null) player.setPlaybackSpeed(playbackSpeed);
             return false;
         });
 
@@ -255,9 +260,14 @@ public class PlaybackActivity extends FragmentActivity {
     }
 
     private void initializePlayer() {
-        // Mark initialization as in progress
         initializationInProgress = true;
-        
+
+        if (url == null || url.isEmpty()) {
+            initializationInProgress = false;
+            finish();
+            return;
+        }
+
         AuthManager authManager = AuthManager.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
         authManager.withValidAccessToken(accessToken -> {
             // Check if initialization was cancelled or activity is no longer valid
@@ -292,11 +302,12 @@ public class PlaybackActivity extends FragmentActivity {
 
                 @Override
                 public void onPlayerError(@NonNull PlaybackException error) {
+                    MainFragment.dError("EXOPLAYER", error.getLocalizedMessage());
                     if (video != null) {
                         releasePlayer();
                         Toast.makeText(PlaybackActivity.this, "Video could not be played!", Toast.LENGTH_LONG).show();
+                        finish();
                     }
-                    MainFragment.dError("EXOPLAYER", error.getLocalizedMessage());
                 }
 
                 @Override
@@ -304,7 +315,8 @@ public class PlaybackActivity extends FragmentActivity {
                     MainFragment.dLog("STATE", state + "");
                     switch (state) {
                         case Player.STATE_READY:
-                            if (getIntent().getBooleanExtra(DetailsActivity.Resume, false) && !resumed) {
+                            if (getIntent().getBooleanExtra(DetailsActivity.Resume, false) && !resumed
+                                    && video.getVideoInfo() != null) {
                                 player.seekTo(video.getVideoInfo().getProgress() * 1000);
                                 resumed = true;
                             }
@@ -312,6 +324,7 @@ public class PlaybackActivity extends FragmentActivity {
                         case Player.STATE_ENDED:
                             saveVideoPosition();
                             releasePlayer();
+                            finish();
                             break;
                         default:
                             break;
@@ -343,7 +356,8 @@ public class PlaybackActivity extends FragmentActivity {
     }
 
     private void saveVideoPosition() {
-        if (player != null) {
+        if (player != null && video != null
+                && video.getVideoId() != null && !video.getVideoId().isEmpty()) {
             client.setVideoProgress(video.getVideoId(), (int) (player.getCurrentPosition() / 1000));
         }
     }
@@ -353,12 +367,23 @@ public class PlaybackActivity extends FragmentActivity {
             playWhenReady = player.getPlayWhenReady();
             playbackPosition = player.getCurrentPosition();
             currentWindow = player.getCurrentMediaItemIndex();
+            playerView.setPlayer(null);
             player.stop();
             player.release();
             player = null;
             playerInitialized = false;
             initializationInProgress = false;
-            this.finish();
+            // Do NOT call finish() here — releasePlayer is also called on onPause/onStop
+            // (backgrounding). finish() is called explicitly only when playback ends or errors.
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        releasePlayer();
+        if (mediaSession != null) {
+            mediaSession.release();
+        }
+        super.onDestroy();
     }
 }

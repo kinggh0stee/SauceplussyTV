@@ -64,7 +64,10 @@ class SocketClient private constructor(private val context: Context, private val
                     // Response Headers
                     @Suppress("UNCHECKED_CAST")
                     val headers = it[0] as Map<String, List<String>>
-                    MainFragment.dLog("$TAG --> RESPONSE HEADERS", headers.toString())
+                    val redacted = headers.mapValues { (k, v) ->
+                        if (k.equals("Set-Cookie", ignoreCase = true) || k.equals("Cookie", ignoreCase = true)) "[redacted]" else v.toString()
+                    }
+                    MainFragment.dLog("$TAG --> RESPONSE HEADERS", redacted.toString())
                 }
             }
 

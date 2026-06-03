@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-feature android:name="android.hardware.touchscreen"
         android:required="false"/>
     <uses-feature android:name="android.hardware.faketouch"
-        android:required="false"/>
+        android:required="false"
+        tools:ignore="Typos"/>
     <uses-feature android:name="android.hardware.telephony"
         android:required="false"/>
     <uses-feature android:name="android.hardware.camera"
@@ -26,10 +28,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -43,9 +42,7 @@
             android:banner="@drawable/banner"
             android:exported="true"
             android:icon="@drawable/icon"
-            android:label="@string/app_name"
-            android:logo="@drawable/banner"
-            android:screenOrientation="landscape">
+            android:logo="@drawable/banner">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

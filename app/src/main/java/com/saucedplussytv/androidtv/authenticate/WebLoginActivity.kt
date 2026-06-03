@@ -42,6 +42,9 @@ class WebLoginActivity : Activity() {
     /** sails.sid value captured after the login page first loads; changes on successful auth. */
     private var initialSidValue: String? = null
 
+    /** Last URL seen by doUpdateVisitedHistory; more reliable than webView.url after pushState. */
+    private var lastNavigatedUrl: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_web_login)
@@ -113,6 +116,7 @@ class WebLoginActivity : Activity() {
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 super.doUpdateVisitedHistory(view, url, isReload)
+                if (url != null) lastNavigatedUrl = url
                 maybeFinish(url)
             }
 
@@ -137,31 +141,34 @@ class WebLoginActivity : Activity() {
 
         webView.loadUrl(LOGIN_URL)
 
-        // Polling fallback — two purposes:
+        // Polling fallback — three purposes:
         // 1. Catch React replaceState navigations that doUpdateVisitedHistory misses.
-        // 2. Detect sails.sid value change for SPAs that never navigate away from /login.
+        // 2. Retry the URL check after the cookie race window (webView.url may be stale
+        //    after pushState; lastNavigatedUrl is used instead).
+        // 3. Detect sails.sid value change for SPAs that never navigate away from /login.
         pollHandler.postDelayed(object : Runnable {
             override fun run() {
                 if (completed || isFinishing || isDestroyed) return
 
-                // Primary: URL left the login page with sails.sid present
-                webView.url?.let { maybeFinish(it) }
+                // Use lastNavigatedUrl — webView.url can be stale after React Router pushState.
+                val pollUrl = lastNavigatedUrl ?: webView.url
+                pollUrl?.let { maybeFinish(it) }
 
                 if (!completed) {
-                    // Fallback: sails.sid value changed from baseline captured at page load.
-                    // This fires when the SPA calls /api/v3/auth/login via XHR and the server
-                    // issues a new authenticated sails.sid without navigating the page.
+                    CookieManager.getInstance().flush()
                     val cookieHeader = CookieManager.getInstance().getCookie(SITE)
                     val currentSid = extractSidValue(cookieHeader)
                     val baseline = initialSidValue
 
                     when {
-                        baseline == null && currentSid != null ->
-                            // Baseline not captured yet (CF challenge just resolved); store it now
+                        baseline == null && currentSid != null -> {
+                            // First sails.sid seen — store as baseline AND retry URL detection.
+                            // The SPA may have already navigated to the home page before this poll
+                            // fires; now that the cookie is available maybeFinish will succeed.
                             initialSidValue = currentSid
-
+                            pollUrl?.let { maybeFinish(it) }
+                        }
                         baseline != null && currentSid != null && currentSid != baseline -> {
-                            // sails.sid changed → login completed
                             Log.d(TAG, "Login detected via sails.sid change")
                             acceptLogin(cookieHeader!!)
                         }
@@ -176,19 +183,30 @@ class WebLoginActivity : Activity() {
     /**
      * URL-based login detection: once we navigate away from the login page and have sails.sid,
      * the user has authenticated. Invalid cookies are caught downstream by getSubs().
+     *
+     * Retries up to 5 times at 300 ms intervals to handle the race where the React SPA
+     * fires a pushState navigation before the WebKit cookie jar has flushed the sails.sid
+     * from the XHR Set-Cookie response.
      */
-    private fun maybeFinish(url: String?) {
-        if (completed || url == null) return
+    private fun maybeFinish(url: String?, retryCount: Int = 0) {
+        if (completed || url == null || isFinishing || isDestroyed) return
         val uri = Uri.parse(url)
         val host = uri.host ?: return
         if (host != HOST && host != "www.$HOST") return
         if (!isAppRoute(uri.path)) return
 
+        CookieManager.getInstance().flush()
         val cookieHeader = CookieManager.getInstance().getCookie(SITE)
-        if (cookieHeader.isNullOrEmpty() || !cookieHeader.contains(SESSION_COOKIE_NAME)) return
+        if (!cookieHeader.isNullOrEmpty() && cookieHeader.contains(SESSION_COOKIE_NAME)) {
+            Log.d(TAG, "Login detected via URL navigation")
+            acceptLogin(cookieHeader)
+            return
+        }
 
-        Log.d(TAG, "Login detected via URL navigation")
-        acceptLogin(cookieHeader)
+        // On a valid non-login route but cookie not yet available — schedule retries.
+        if (retryCount < 5) {
+            pollHandler.postDelayed({ maybeFinish(url, retryCount + 1) }, 300)
+        }
     }
 
     private fun acceptLogin(cookieHeader: String) {
