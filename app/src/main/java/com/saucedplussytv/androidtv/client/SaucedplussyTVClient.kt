@@ -63,7 +63,10 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
             override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
-            override fun onError(error: VolleyError) = callback(null)
+            override fun onError(error: VolleyError) {
+                MainFragment.dError(TAG, "getSubs error: ${error.javaClass.simpleName} status=${error.networkResponse?.statusCode}")
+                callback(null)
+            }
         })
         }, {
             callback(null)

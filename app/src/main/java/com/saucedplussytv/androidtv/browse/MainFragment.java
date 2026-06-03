@@ -119,7 +119,11 @@ public class MainFragment extends BrowseSupportFragment {
                             requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
                         authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
                         isLoggedIn = true;
-                        initialize();
+                        // Brief delay: cf_clearance needs ~1s to propagate across CF's CDN
+                        // before the app's native HTTP client can use it successfully.
+                        liveHandler.postDelayed(() -> {
+                            if (isLoggedIn && isAdded()) initialize();
+                        }, 1500);
                     } else {
                         dLog(TAG, "Login result missing session cookie; restarting login flow.");
                         checkLogin();
@@ -824,7 +828,7 @@ public class MainFragment extends BrowseSupportFragment {
 
     @SuppressLint("UseCompatLoadingForDrawables")
     private void setupUIElements() {
-        setBadgeDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.white_plane));
+        setBadgeDrawable(ContextCompat.getDrawable(requireActivity(), R.drawable.icon));
         setHeadersState(HEADERS_ENABLED);
         setHeadersTransitionOnBackEnabled(true);
         setHeaderPresenterSelector(new PresenterSelector() {
