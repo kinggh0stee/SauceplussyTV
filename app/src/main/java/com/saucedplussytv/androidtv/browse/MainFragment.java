@@ -13,6 +13,8 @@ import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityOptionsCompat;
@@ -99,9 +101,47 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean adapterInitialized = false;
     private int loadGeneration = 0;
 
+    private ActivityResultLauncher<Intent> loginLauncher;
+    private ActivityResultLauncher<Intent> detailLauncher;
+
     @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        loginLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    String sessionCookie = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_SESSION_COOKIE);
+                    String userAgent = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_USER_AGENT);
+                    if (sessionCookie != null && !sessionCookie.isEmpty()) {
+                        AuthManager authManager = AuthManager.Companion.getInstance(
+                            requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+                        authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
+                        isLoggedIn = true;
+                        initialize();
+                    } else {
+                        dLog(TAG, "Login result missing session cookie; restarting login flow.");
+                        checkLogin();
+                    }
+                }
+            }
+        );
+        detailLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    if (result.getData().getBooleanExtra("REFRESH", false)) {
+                        refreshVideoProgress();
+                    }
+                }
+            }
+        );
+    }
+
+    @Override
+    public void onViewCreated(@NonNull android.view.View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
         client = SaucedplussyTVClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
         socketClient = SocketClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
         checkLogin();
@@ -139,38 +179,11 @@ public class MainFragment extends BrowseSupportFragment {
             isLoggedIn = false;
             Intent intent = new Intent(getActivity(), com.saucedplussytv.androidtv.authenticate.WebLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
-            startActivityForResult(intent, Constants.REQ_CODE_LOGIN);
+            loginLauncher.launch(intent);
             return Unit.INSTANCE;
         });
     }
 
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == Constants.REQ_CODE_LOGIN && resultCode == RESULT_OK && data != null) {
-            String sessionCookie = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_SESSION_COOKIE);
-            String userAgent = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_USER_AGENT);
-
-            if (sessionCookie != null && !sessionCookie.isEmpty()) {
-                AuthManager authManager = AuthManager.Companion.getInstance(
-                        requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
-                authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
-
-                // Mark as logged in and initialize
-                isLoggedIn = true;
-                initialize();
-            } else {
-                dLog(TAG, "Login result missing session cookie; restarting login flow.");
-                // Restart login flow to avoid running without credentials
-                checkLogin();
-            }
-        } else if (requestCode == Constants.REQ_CODE_DETAIL && resultCode == RESULT_OK && data != null) {
-            if (data.getBooleanExtra("REFRESH", false)) {
-                refreshVideoProgress();
-            }
-        }
-    }
 
     @Override
     public void onDestroyView() {
@@ -868,15 +881,14 @@ public class MainFragment extends BrowseSupportFragment {
             Intent intent = new Intent(getActivity(), DetailsActivity.class);
 
             // Setup transition animation to detail screen
-            Bundle bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
+            ActivityOptionsCompat activityOptions = ActivityOptionsCompat.makeSceneTransitionAnimation(
                             requireActivity(),
                             itemViewHolder.view.findViewById(R.id.image),
-                            DetailsActivity.SHARED_ELEMENT_NAME)
-                    .toBundle();
+                            DetailsActivity.SHARED_ELEMENT_NAME);
 
             if ("live".equalsIgnoreCase(video.getType())) {
                 intent.putExtra(DetailsActivity.Video, video);
-                requireActivity().startActivity(intent, bundle);
+                requireActivity().startActivity(intent, activityOptions.toBundle());
             } else {
                 // getVideoId() returns attachmentOrder[0] from the list response, which may be
                 // absent or may contain a non-video attachment ID. getPost gives us the canonical
@@ -908,7 +920,7 @@ public class MainFragment extends BrowseSupportFragment {
                             }
                             newVideo.setVideoInfo(videoInfo);
                             intent.putExtra(DetailsActivity.Video, newVideo);
-                            startActivityForResult(intent, Constants.REQ_CODE_DETAIL, bundle);
+                            detailLauncher.launch(intent, activityOptions);
                             return Unit.INSTANCE;
                         });
                         return Unit.INSTANCE;

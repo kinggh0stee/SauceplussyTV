@@ -82,7 +82,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
         super.onCreate(savedInstanceState);
 
         mDetailsBackground = new DetailsSupportFragmentBackgroundController(this);
-        mSelectedMovie = (Video) getActivity().getIntent().getSerializableExtra(DetailsActivity.Video);
+        mSelectedMovie = getActivity().getIntent().getSerializableExtra(DetailsActivity.Video, Video.class);
 
         if (mSelectedMovie != null) {
             //String mSelectedUrl = getActivity().getIntent().getStringExtra("vidURL");

@@ -13,6 +13,7 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.fragment.app.FragmentActivity;
@@ -71,7 +72,7 @@ public class PlaybackActivity extends FragmentActivity {
         setContentView(R.layout.activity_player);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        final Video video = (Video) getIntent().getSerializableExtra(DetailsActivity.Video);
+        final Video video = getIntent().getSerializableExtra(DetailsActivity.Video, Video.class);
         this.video = video;
         if (video == null) {
             finish();
@@ -97,6 +98,21 @@ public class PlaybackActivity extends FragmentActivity {
             }
         });
 
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (playerView.isControllerFullyVisible()) {
+                    if (exo_playback_menu.getVisibility() == View.VISIBLE) {
+                        playerView.hideController();
+                    } else {
+                        exo_settings_menu.setVisibility(View.GONE);
+                        exo_playback_menu.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    finish();
+                }
+            }
+        });
     }
 
     @Override
@@ -139,22 +155,6 @@ public class PlaybackActivity extends FragmentActivity {
         return playerView.dispatchKeyEvent(event) || super.dispatchKeyEvent(event);
     }
 
-    @Deprecated
-    @SuppressWarnings("deprecation")
-    @Override
-    public void onBackPressed() {
-        // Hide the menu
-        if (playerView.isControllerFullyVisible()) {
-            if (exo_playback_menu.getVisibility() == View.VISIBLE) {
-                playerView.hideController();
-            } else {
-                exo_settings_menu.setVisibility(View.GONE);
-                exo_playback_menu.setVisibility(View.VISIBLE);
-            }
-        } else {
-            super.onBackPressed();
-        }
-    }
 
     private void setupLikeAndDislike() {
         client.getPost(video.getId(), post -> {

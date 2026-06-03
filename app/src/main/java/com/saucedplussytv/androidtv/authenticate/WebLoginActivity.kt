@@ -1,6 +1,5 @@
 package com.saucedplussytv.androidtv.authenticate
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -16,6 +15,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
 import com.saucedplussytv.androidtv.R
 
 /**
@@ -35,7 +36,7 @@ import com.saucedplussytv.androidtv.R
  *
  * Returns RESULT_OK with extras [EXTRA_SESSION_COOKIE] and [EXTRA_USER_AGENT] on success.
  */
-class WebLoginActivity : Activity() {
+class WebLoginActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
@@ -184,6 +185,17 @@ class WebLoginActivity : Activity() {
                 if (!completed) pollHandler.postDelayed(this, 1000)
             }
         }, 2000)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    setResult(RESULT_CANCELED)
+                    finish()
+                }
+            }
+        })
     }
 
     /**
@@ -282,17 +294,6 @@ class WebLoginActivity : Activity() {
             .firstOrNull { it.trim().startsWith("$SESSION_COOKIE_NAME=") }
             ?.substringAfter("$SESSION_COOKIE_NAME=")
             ?.trim()
-    }
-
-    @Deprecated("Deprecated in Android API")
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            setResult(RESULT_CANCELED)
-            super.onBackPressed()
-        }
     }
 
     override fun onDestroy() {

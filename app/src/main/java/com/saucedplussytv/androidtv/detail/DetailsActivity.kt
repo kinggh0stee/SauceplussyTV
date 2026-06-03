@@ -2,6 +2,7 @@ package com.saucedplussytv.androidtv.detail
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.saucedplussytv.androidtv.R
 
@@ -17,11 +18,13 @@ class DetailsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_details)
         supportFragmentManager.beginTransaction().add(R.id.details_fragment, VideoDetailsFragment()).commit()
-    }
 
-    override fun onBackPressed() {
-        setResult(RESULT_OK, Intent().putExtra("REFRESH", true))
-        super.onBackPressed()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                setResult(RESULT_OK, Intent().putExtra("REFRESH", true))
+                finish()
+            }
+        })
     }
 
     companion object {
