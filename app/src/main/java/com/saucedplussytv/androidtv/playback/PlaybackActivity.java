@@ -3,7 +3,6 @@ package com.saucedplussytv.androidtv.playback;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Bundle;
-import android.support.v4.media.session.MediaSessionCompat;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
@@ -15,19 +14,19 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.fragment.app.FragmentActivity;
-
-import com.google.android.exoplayer2.ExoPlayer;
-import com.google.android.exoplayer2.MediaItem;
-import com.google.android.exoplayer2.PlaybackException;
-import com.google.android.exoplayer2.Player;
-import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector;
-import com.google.android.exoplayer2.extractor.ts.DefaultTsPayloadReaderFactory;
-import com.google.android.exoplayer2.source.hls.DefaultHlsExtractorFactory;
-import com.google.android.exoplayer2.source.hls.HlsMediaSource;
-import com.google.android.exoplayer2.ui.PlayerView;
-import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
-import com.google.android.exoplayer2.util.Util;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory;
+import androidx.media3.exoplayer.hls.HlsMediaSource;
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
+import androidx.media3.session.MediaSession;
+import androidx.media3.ui.PlayerView;
 
 import java.util.HashMap;
 
@@ -39,6 +38,7 @@ import com.saucedplussytv.androidtv.client.SaucedplussyTVClient;
 import com.saucedplussytv.androidtv.detail.DetailsActivity;
 import com.saucedplussytv.androidtv.models.Video;
 
+@OptIn(markerClass = UnstableApi.class)
 public class PlaybackActivity extends FragmentActivity {
 
     private SaucedplussyTVClient client;
@@ -51,8 +51,7 @@ public class PlaybackActivity extends FragmentActivity {
     private LinearLayout exo_playback_menu;
     private LinearLayout exo_settings_menu;
     private ExoPlayer player;
-    private MediaSessionCompat mediaSession;
-    private MediaSessionConnector mediaController;
+    private MediaSession mediaSession;
 
     private boolean playWhenReady = true;
     private int currentWindow = 0;
@@ -91,80 +90,46 @@ public class PlaybackActivity extends FragmentActivity {
         setupLikeAndDislike();
         setupMenu();
 
-        playerView.setControllerVisibilityListener(visibility -> {
+        playerView.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) visibility -> {
             if (visibility != View.VISIBLE) {
                 exo_playback_menu.setVisibility(View.VISIBLE);
                 exo_settings_menu.setVisibility(View.GONE);
             }
         });
 
-        // setup media session
-        mediaSession = new MediaSessionCompat(this, getPackageName());
-        mediaController = new MediaSessionConnector(mediaSession);
     }
 
     @Override
     public void onStart() {
         super.onStart();
-
-        if (Util.SDK_INT > 23) {
-            // Only initialize if not already initialized or in progress
-            if (!playerInitialized && !initializationInProgress && player == null) {
-                initializePlayer();
-            }
+        if (!playerInitialized && !initializationInProgress && player == null) {
+            initializePlayer();
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-
-        if (Util.SDK_INT <= 23 || player == null) {
-            // Only initialize if not already initialized or in progress
-            if (!playerInitialized && !initializationInProgress) {
-                initializePlayer();
-            }
+        // onStart handles init for API 24+; this guards the rare case player is null on resume
+        if (player == null && !playerInitialized && !initializationInProgress) {
+            initializePlayer();
         }
     }
 
     @Override
     public void onPause() {
         super.onPause();
-
-        if (Util.SDK_INT <= 23) {
-            // Cancel any in-progress initialization
-            if (initializationInProgress) {
-                initializationInProgress = false;
-            }
-            
-            if (playerInitialized) {
-                mediaController.setPlayer(null);
-                playerInitialized = false;
-            }
-            mediaSession.setActive(false);
-            saveVideoPosition();
-            releasePlayer();
-        }
     }
 
     @Override
     public void onStop() {
         super.onStop();
-
-        if (Util.SDK_INT > 23) {
-            // Cancel any in-progress initialization
-            if (initializationInProgress) {
-                initializationInProgress = false;
-            }
-            
-            if (playerInitialized) {
-                mediaController.setPlayer(null);
-                playerInitialized = false;
-            }
-            mediaSession.setActive(false);
-            saveVideoPosition();
-            releasePlayer();
+        if (initializationInProgress) {
+            initializationInProgress = false;
         }
+        playerInitialized = false;
+        saveVideoPosition();
+        releasePlayer();
     }
 
     @SuppressLint("RestrictedApi")
@@ -179,7 +144,7 @@ public class PlaybackActivity extends FragmentActivity {
     @Override
     public void onBackPressed() {
         // Hide the menu
-        if (playerView.isControllerVisible()) {
+        if (playerView.isControllerFullyVisible()) {
             if (exo_playback_menu.getVisibility() == View.VISIBLE) {
                 playerView.hideController();
             } else {
@@ -335,11 +300,13 @@ public class PlaybackActivity extends FragmentActivity {
 
             // Only set up media session if activity is still in a valid state
             if (!isFinishing() && !isDestroyed()) {
-                mediaController.setPlayer(player);
-                mediaSession.setActive(true);
+                if (mediaSession != null) {
+                    mediaSession.release();
+                    mediaSession = null;
+                }
+                mediaSession = new MediaSession.Builder(PlaybackActivity.this, player).build();
                 playerInitialized = true;
             } else {
-                // Activity is no longer valid, release the player
                 if (player != null) {
                     player.release();
                     player = null;
@@ -372,6 +339,10 @@ public class PlaybackActivity extends FragmentActivity {
             player.stop();
             player.release();
             player = null;
+            if (mediaSession != null) {
+                mediaSession.release();
+                mediaSession = null;
+            }
             playerInitialized = false;
             initializationInProgress = false;
             // Do NOT call finish() here — releasePlayer is also called on onPause/onStop
@@ -384,6 +355,7 @@ public class PlaybackActivity extends FragmentActivity {
         releasePlayer();
         if (mediaSession != null) {
             mediaSession.release();
+            mediaSession = null;
         }
         super.onDestroy();
     }

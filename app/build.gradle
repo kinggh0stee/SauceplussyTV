@@ -77,9 +77,11 @@ dependencies {
     implementation 'com.github.bumptech.glide:glide:4.16.0'
     implementation 'org.ocpsoft.prettytime:prettytime:5.0.0.Final'
 
-    // ExoPlayer
-    implementation 'com.google.android.exoplayer:exoplayer:2.19.1'
-    implementation 'com.google.android.exoplayer:extension-mediasession:2.19.1'
+    // Media3
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+    implementation 'androidx.media3:media3-session:1.4.1'
 
     // Version Compare
     implementation("io.github.g00fy2:versioncompare:1.5.0")

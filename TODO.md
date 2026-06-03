@@ -2,17 +2,10 @@
 
 ## High Priority
 
-### Media3 Migration
-- **Status:** Not started
-- **Description:** ExoPlayer 2.x is deprecated. Google recommends migrating to `androidx.media3:media3-exoplayer` (latest: 1.10.1)
-- **Impact:** Breaking changes - package names change from `com.google.android.exoplayer2` to `androidx.media3`, API changes, PlayerView migration
-- **Benefits:** Better lifecycle support, modern APIs, future-proof, continued security updates
-- **Files affected:** `PlaybackActivity.java`, `activity_player.xml`, `view_exo_controller.xml`
-
 ### Package Namespace Completion
-- **Status:** In progress (source code done, assets remaining)
+- **Status:** In progress (banner.png, icon.png done; colors remaining)
 - **Description:** Full rebrand from `ml.bmlzootown.hydravion` to `com.saucedplussytv.androidtv`
-- **Remaining:** Update drawable assets (banner.png, icon.png), launcher mipmaps, colors
+- **Remaining:** `res/values/colors.xml` — brand colors
 
 ## Medium Priority
 
@@ -63,6 +56,7 @@
 - [x] Android Gradle Plugin 8.13.1 → 9.2.1
 - [x] Kotlin 1.6.21 → 2.1.10
 - [x] ExoPlayer 2.17.1 → 2.19.1
+- [x] ExoPlayer 2.x → Media3 1.4.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session)
 - [x] Auth rewrite: Keycloak OIDC → WebView cookie-session
 - [x] API host: floatplane.com → sauceplus.com
 - [x] App rebrand: Hydravion → SaucedplussyTV

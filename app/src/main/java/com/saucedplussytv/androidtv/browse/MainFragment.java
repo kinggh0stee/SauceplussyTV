@@ -26,7 +26,6 @@ import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.PresenterSelector;
 
-import com.google.android.exoplayer2.util.Util;
 import com.google.gson.Gson;
 
 import org.json.JSONException;
@@ -990,7 +989,7 @@ public class MainFragment extends BrowseSupportFragment {
             dLog("Supported Resolution", "1080 (fallback - no level info)");
             return "1080";
         }
-        int y = Util.getCurrentDisplayModeSize(requireContext()).y;
+        int y = requireContext().getResources().getDisplayMetrics().heightPixels;
         AtomicBoolean found = new AtomicBoolean(false);
         String res = "";
         info.getLevels().forEach(level -> {
