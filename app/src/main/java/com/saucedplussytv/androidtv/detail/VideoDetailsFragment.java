@@ -16,6 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityOptionsCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.IntentCompat;
 import androidx.leanback.app.DetailsSupportFragment;
 import androidx.leanback.app.DetailsSupportFragmentBackgroundController;
 import androidx.leanback.widget.Action;
@@ -82,7 +83,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
         super.onCreate(savedInstanceState);
 
         mDetailsBackground = new DetailsSupportFragmentBackgroundController(this);
-        mSelectedMovie = getActivity().getIntent().getSerializableExtra(DetailsActivity.Video, Video.class);
+        mSelectedMovie = IntentCompat.getSerializableExtra(getActivity().getIntent(), DetailsActivity.Video, Video.class);
 
         if (mSelectedMovie != null) {
             //String mSelectedUrl = getActivity().getIntent().getStringExtra("vidURL");

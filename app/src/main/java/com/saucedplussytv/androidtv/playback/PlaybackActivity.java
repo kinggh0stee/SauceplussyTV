@@ -14,6 +14,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.core.content.IntentCompat;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.fragment.app.FragmentActivity;
@@ -72,7 +73,7 @@ public class PlaybackActivity extends FragmentActivity {
         setContentView(R.layout.activity_player);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        final Video video = getIntent().getSerializableExtra(DetailsActivity.Video, Video.class);
+        final Video video = IntentCompat.getSerializableExtra(getIntent(), DetailsActivity.Video, Video.class);
         this.video = video;
         if (video == null) {
             finish();
