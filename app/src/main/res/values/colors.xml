@@ -11,7 +11,7 @@
     <color name="background_gradient_end">#2a3f54</color>
     <color name="fastlane_background">#1f2e3e</color>
     <color name="search_opaque">#e76f51</color>
-    <color name="selected_background">#2a3f54</color>
+    <color name="selected_background">#e76f51</color>
     <color name="default_background">#1f2e3e</color>
     <color name="colorAccent">#e76f51</color>
     <color name="chipTextColor">#FFFFFF</color>

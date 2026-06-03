@@ -36,6 +36,7 @@ class WebLoginActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var progress: ProgressBar
+    private lateinit var loadingOverlay: android.view.ViewGroup
     @Volatile private var completed = false
     private val pollHandler = Handler(Looper.getMainLooper())
 
@@ -50,6 +51,7 @@ class WebLoginActivity : Activity() {
         setContentView(R.layout.activity_web_login)
         webView = findViewById(R.id.web_view)
         progress = findViewById(R.id.progress)
+        loadingOverlay = findViewById(R.id.loading_overlay)
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -60,22 +62,24 @@ class WebLoginActivity : Activity() {
             isFocusable = true
             isFocusableInTouchMode = true
             requestFocus()
+            // Force GPU compositing — reduces CPU load during Cloudflare Turnstile JS execution.
+            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 cacheMode = WebSettings.LOAD_DEFAULT
                 useWideViewPort = true
                 loadWithOverviewMode = true
-                setSupportZoom(true)
-                builtInZoomControls = true
-                displayZoomControls = false
+                // Zoom controls are not useful on a TV remote and add touch-interception
+                // overhead that can slow key-event delivery to the page.
+                setSupportZoom(false)
             }
         }
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                progress.visibility = View.GONE
+                loadingOverlay.visibility = View.GONE
 
                 // Scale down for TV: site targets ~1280px desktop; a 1920px WebView upscales it
                 // ~1.5x making everything too large. CSS zoom scales the entire render tree.
@@ -128,7 +132,7 @@ class WebLoginActivity : Activity() {
                 super.onReceivedError(view, request, error)
                 if (completed || request?.isForMainFrame != true) return
                 Log.w(TAG, "Login page failed to load: ${error?.description}")
-                progress.visibility = View.GONE
+                loadingOverlay.visibility = View.GONE
                 Toast.makeText(
                     this@WebLoginActivity,
                     "Couldn't reach the SaucedplussyTV login page. Check your connection and try again.",

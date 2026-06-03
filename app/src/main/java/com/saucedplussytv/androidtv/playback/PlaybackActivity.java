@@ -264,6 +264,7 @@ public class PlaybackActivity extends FragmentActivity {
 
         if (url == null || url.isEmpty()) {
             initializationInProgress = false;
+            Toast.makeText(this, "Video URL unavailable", Toast.LENGTH_LONG).show();
             finish();
             return;
         }

@@ -209,9 +209,22 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                 startActivity(intent);
             } else if (action.getId() == ACTION_RES) {
                 client.getPost(mSelectedMovie.getGuid(), post -> {
+                    if (post == null || post.getVideoAttachments() == null
+                            || post.getVideoAttachments().isEmpty()) {
+                        if (getActivity() != null) {
+                            Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                        }
+                        return Unit.INSTANCE;
+                    }
                     String guid = post.getVideoAttachments().get(0).getGuid();
                     if (!guid.isEmpty()) {
                         client.getVideoInfo(guid, videoInfo -> {
+                            if (videoInfo == null || videoInfo.getLevels() == null) {
+                                if (getActivity() != null) {
+                                    Toast.makeText(getActivity(), "Could not load video info", Toast.LENGTH_SHORT).show();
+                                }
+                                return Unit.INSTANCE;
+                            }
                             List<Level> levels = videoInfo.getLevels();
                             List<String> resolutions = new ArrayList<>();
                             for (Level l : levels) {

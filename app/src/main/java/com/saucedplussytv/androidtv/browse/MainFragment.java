@@ -286,17 +286,38 @@ public class MainFragment extends BrowseSupportFragment {
         dLog("SOCKET --> SYNCEVENT", event.toString());
     };
 
+    /**
+     * Full sign-out initiated by the user (Settings → Logout).
+     * Clears WebView cookies so the next login forces a fresh account selection.
+     */
     private void logout() {
+        doLogout(true);
+    }
+
+    /**
+     * Session-expiry relink — clears only the stored token, NOT the WebView cookie jar.
+     * Preserving cf_clearance means Cloudflare's Turnstile challenge is skipped on the
+     * next login (the clearance is still valid), making re-authentication much faster.
+     */
+    private void relinkSession() {
+        doLogout(false);
+    }
+
+    private void doLogout(boolean clearWebCookies) {
         SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
 
         // Clear the stored Sauce+ session cookie / User-Agent.
         AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), prefs);
         authManager.clearTokens();
 
-        // Also clear the WebView cookie jar, otherwise WebLoginActivity replays the old
-        // sails.sid / cf_clearance and the user can't sign in as a different account.
-        android.webkit.CookieManager.getInstance().removeAllCookies(null);
-        android.webkit.CookieManager.getInstance().flush();
+        if (clearWebCookies) {
+            // Full logout: wipe the WebView cookie jar so the next WebLoginActivity
+            // session starts clean and can log in as a different account.
+            android.webkit.CookieManager.getInstance().removeAllCookies(null);
+            android.webkit.CookieManager.getInstance().flush();
+        }
+        // On session expiry we keep WebView cookies: cf_clearance survives so the
+        // Cloudflare Turnstile challenge is skipped on the next login.
 
         // Clear all in-memory data structures
         subscriptions.clear();
@@ -304,28 +325,28 @@ public class MainFragment extends BrowseSupportFragment {
         strms.clear();
         videoProgress.clear();
         creatorPages.clear();
-        
+
         // Reset state variables
         subCount = 0;
         rowSelected = 0;
         colSelected = 0;
         liveIndex = -1;
-        
+
         // Remove any pending live handler callbacks to prevent accessing cleared data
         liveHandler.removeCallbacksAndMessages(null);
-        
+
         // Disconnect socket if connected
         if (socket != null && socket.connected()) {
             socket.disconnect();
             socket.off();
             socket = null;
         }
-        
+
         // Clear the adapter to prevent stale data from being displayed
         if (getAdapter() != null) {
             setAdapter(null);
         }
-        
+
         // Reset adapter initialization flag
         adapterInitialized = false;
 
@@ -378,11 +399,11 @@ public class MainFragment extends BrowseSupportFragment {
             if (subscriptions == null) {
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
-                        .setMessage("Your SaucedplussyTV session has expired. Please relink your account.")
-                        .setPositiveButton("Relink",
+                        .setMessage("Your SaucedplussyTV session has expired. Please log in again.")
+                        .setPositiveButton("Log in",
                                 (dialog, which) -> {
                                     dialog.dismiss();
-                                    logout();
+                                    relinkSession();
                                 })
                         .setNegativeButton("Cancel",
                                 (dialog, which) -> dialog.dismiss())
@@ -396,7 +417,7 @@ public class MainFragment extends BrowseSupportFragment {
                             .setPositiveButton("OK",
                                     (dialog, which) -> {
                                         dialog.dismiss();
-                                        logout();
+                                        relinkSession();
                                     })
                             .create()
                             .show();
@@ -608,13 +629,13 @@ public class MainFragment extends BrowseSupportFragment {
         adapterInitialized = true;
 
         if (isFirstBuild) {
-            // Transition focus from the headers panel into the content rows so D-pad
-            // left/right reaches video cards. Only needed on first build — re-running it
-            // on every refresh would fight the user's current focus position.
-            startHeadersTransition(false);
-
-            // Restore last known scroll position after the adapter is first built.
-            setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected));
+            // Post so the RecyclerView layout pass completes before we request focus on a card.
+            // setSelectedPosition alone is enough — startHeadersTransition(false) is NOT called
+            // because it hides the header panel entirely and its timing is unreliable after
+            // setAdapter(), which left focus stuck at the row level with no left/right movement.
+            liveHandler.post(() ->
+                setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected))
+            );
         }
     }
 
@@ -863,14 +884,29 @@ public class MainFragment extends BrowseSupportFragment {
                 // videoAttachments[0].guid that /api/v3/content/video and /api/v3/delivery/info
                 // actually require — the same lookup VideoDetailsFragment.ACTION_RES already uses.
                 client.getPost(video.getGuid(), post -> {
+                    if (post == null) {
+                        Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                        return Unit.INSTANCE;
+                    }
                     List<VideoAttachments> attachments = post.getVideoAttachments();
-                    if (attachments == null || attachments.isEmpty()) return Unit.INSTANCE;
+                    if (attachments == null || attachments.isEmpty()) {
+                        Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                        return Unit.INSTANCE;
+                    }
                     String videoId = attachments.get(0).getGuid();
                     // Patch so getVideo's entityId param is also correct
                     video.setAttachmentIds(new String[]{ videoId });
                     client.getVideoInfo(videoId, videoInfo -> {
+                        if (videoInfo == null) {
+                            Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                            return Unit.INSTANCE;
+                        }
                         String res = getHighestSupportedRes(videoInfo);
                         client.getVideo(video, res, newVideo -> {
+                            if (newVideo.getVidUrl() == null || newVideo.getVidUrl().isEmpty()) {
+                                Toast.makeText(getActivity(), "Video URL unavailable", Toast.LENGTH_SHORT).show();
+                                return Unit.INSTANCE;
+                            }
                             newVideo.setVideoInfo(videoInfo);
                             intent.putExtra(DetailsActivity.Video, newVideo);
                             startActivityForResult(intent, Constants.REQ_CODE_DETAIL, bundle);
@@ -950,6 +986,10 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private String getHighestSupportedRes(VideoInfo info) {
+        if (info == null || info.getLevels() == null || info.getLevels().isEmpty()) {
+            dLog("Supported Resolution", "1080 (fallback - no level info)");
+            return "1080";
+        }
         int y = Util.getCurrentDisplayModeSize(requireContext()).y;
         AtomicBoolean found = new AtomicBoolean(false);
         String res = "";

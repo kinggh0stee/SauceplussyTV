@@ -8,7 +8,7 @@
     android:focusableInTouchMode="true"
     android:paddingTop="0dp"
     android:paddingBottom="8dp"
-    tools:background="@color/default_background"
+    android:background="@drawable/card_focus_background"
     tools:layout_gravity="center">
 
     <ImageView
@@ -56,6 +56,7 @@
         android:id="@+id/title"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:focusable="false"
         android:maxLines="1"
         android:paddingHorizontal="8dp"
         android:paddingTop="8dp"

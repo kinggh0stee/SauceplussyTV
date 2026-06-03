@@ -224,19 +224,19 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
         })
     }
 
-    fun getVideoInfo(videoID: String, callback: (VideoInfo) -> Unit) {
+    fun getVideoInfo(videoID: String, callback: (VideoInfo?) -> Unit) {
         authManager.withValidAccessToken({ token ->
             requestTask.sendRequest(
                 "$URI_VIDEO_INFO?id=$videoID",
                 token,
                 object : RequestTask.VolleyCallback {
 
-
                 override fun onSuccess(response: String) {
                     try {
                         callback(gson.fromJson(response, VideoInfo::class.java))
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        callback(null)
                     }
                 }
 
@@ -244,10 +244,10 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
-                override fun onError(error: VolleyError) = Unit
+                override fun onError(error: VolleyError) = callback(null)
             })
         }, {
-            // no-op
+            callback(null)
         })
     }
 
@@ -387,19 +387,19 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
         null
     }
 
-    fun getPost(postId: String, callback: (Post) -> Unit) {
+    fun getPost(postId: String, callback: (Post?) -> Unit) {
         authManager.withValidAccessToken({ token ->
             requestTask.sendRequest(
                 "$URI_POST?id=$postId",
                 token,
                 object : RequestTask.VolleyCallback {
 
-
                 override fun onSuccess(response: String) {
                     try {
                         callback(gson.fromJson(response, Post::class.java))
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        callback(null)
                     }
                 }
 
@@ -407,10 +407,10 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
-                override fun onError(error: VolleyError) = Unit
+                override fun onError(error: VolleyError) = callback(null)
             })
         }, {
-            // no-op
+            callback(null)
         })
     }
 

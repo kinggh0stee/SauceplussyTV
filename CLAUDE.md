@@ -85,6 +85,11 @@ Code migration is complete. Remaining work requires designer/assets:
 - Launcher mipmaps in `res/mipmap-*`
 - `res/values/colors.xml` — brand colors
 
+## Reference material
+
+- `reference/Hydravion-AndroidTV-master/` — untouched upstream base code (original Hydravion Android TV). Do not modify.
+- `reference/apk/` — official Sauce+ Android app APK (reference only). Do not modify.
+
 ## Sub-agents and the review gate (IMPORTANT)
 
 Sub-agents are defined in `.claude/agents/`:

@@ -30,21 +30,24 @@ import com.saucedplussytv.androidtv.models.VideoProgress
 
 class CardPresenter(private val videoProgress: List<VideoProgress>) : Presenter() {
 
+    /** Custom ViewHolder that keeps a stable CardViewHolder reference for onViewFocused. */
+    private class CardPresenterViewHolder(view: View, val card: CardViewHolder) : ViewHolder(view)
+
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
-        val cardView = CardViewHolder(
-            LayoutInflater.from(parent.context).inflate(R.layout.card_video, parent, false)
-        )
-        return ViewHolder(cardView.rootView)
+        val inflated = LayoutInflater.from(parent.context).inflate(R.layout.card_video, parent, false)
+        val card = CardViewHolder(inflated)
+        return CardPresenterViewHolder(inflated, card)
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any?) {
         (item as? Video?)?.let { video ->
-            CardViewHolder(viewHolder.view).setData(video, videoProgress.find { it.id == video.id })
+            (viewHolder as CardPresenterViewHolder).card
+                .setData(video, videoProgress.find { it.id == video.id })
         }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
-        CardViewHolder(viewHolder.view).unBind()
+        (viewHolder as CardPresenterViewHolder).card.unBind()
     }
 
     private class CardViewHolder(val rootView: View) {
@@ -82,23 +85,30 @@ class CardPresenter(private val videoProgress: List<VideoProgress>) : Presenter(
                  */
                 defaultCardImage = ContextCompat.getDrawable(this, R.drawable.white_plane)
             }
+            // Leanback 1.0.0 does not expose Presenter.onViewFocused; Android system focus events
+            // on the focusable root view are the correct mechanism for HorizontalGridView items.
             rootView.onFocusChangeListener =
                 View.OnFocusChangeListener { _, isFocused -> setIsSelected(isFocused) }
             setIsSelected(false)
         }
 
-        private fun setIsSelected(isSelected: Boolean) {
+        fun setIsSelected(isSelected: Boolean) {
             rootView.isSelected = isSelected
             title.isSelected = isSelected
 
             if (isSelected) {
                 rootView.setBackgroundColor(selectedBackgroundColor)
+                rootView.animate().scaleX(1.10f).scaleY(1.10f).setDuration(150).start()
+                rootView.elevation = rootView.context.resources.displayMetrics.density * 8f
                 title.ellipsize = TextUtils.TruncateAt.MARQUEE
                 title.marqueeRepeatLimit = -1
-                title.isFocusable = true
+                // Do NOT set isFocusable=true on the title — it would steal focus from the card root.
+                // isSelected=true on a TextView is enough to trigger the marquee scroll animation.
                 title.setHorizontallyScrolling(true)
             } else {
                 rootView.setBackgroundColor(defaultBackgroundColor)
+                rootView.animate().scaleX(1.0f).scaleY(1.0f).setDuration(150).start()
+                rootView.elevation = 0f
                 title.ellipsize = TextUtils.TruncateAt.END
             }
         }
