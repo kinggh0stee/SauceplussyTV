@@ -1,6 +1,7 @@
 package com.saucedplussytv.androidtv.playback;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
@@ -18,6 +19,11 @@ import androidx.core.content.IntentCompat;
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.fragment.app.FragmentActivity;
+import androidx.media3.common.C;
+import androidx.media3.common.Format;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -30,7 +36,9 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 import androidx.media3.session.MediaSession;
 import androidx.media3.ui.PlayerView;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import kotlin.Unit;
 import com.saucedplussytv.androidtv.R;
@@ -50,6 +58,7 @@ public class PlaybackActivity extends FragmentActivity {
     private ImageView dislike;
     private ImageView menu;
     private ImageView speed;
+    private ImageView subtitles;
     private LinearLayout exo_playback_menu;
     private LinearLayout exo_settings_menu;
     private ExoPlayer player;
@@ -89,6 +98,7 @@ public class PlaybackActivity extends FragmentActivity {
         exo_playback_menu = findViewById(R.id.exo_playback_menu);
         exo_settings_menu = findViewById(R.id.exo_settings_menu);
         speed = findViewById(R.id.exo_speed);
+        subtitles = findViewById(R.id.exo_subtitles);
         setupLikeAndDislike();
         setupMenu();
 
@@ -201,6 +211,7 @@ public class PlaybackActivity extends FragmentActivity {
         });
 
         speed.setOnClickListener(v -> showSpeedDialog());
+        subtitles.setOnClickListener(v -> showSubtitleDialog());
     }
 
     private void showSpeedDialog() {
@@ -223,6 +234,74 @@ public class PlaybackActivity extends FragmentActivity {
         });
 
         speedMenu.show();
+    }
+
+    private void showSubtitleDialog() {
+        if (player == null) return;
+
+        Tracks tracks = player.getCurrentTracks();
+        List<String> labels = new ArrayList<>();
+        List<Tracks.Group> groups = new ArrayList<>();
+        List<Integer> trackIndices = new ArrayList<>();
+
+        labels.add("Off");
+        groups.add(null);
+        trackIndices.add(-1);
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_TEXT) continue;
+            for (int i = 0; i < group.length; i++) {
+                if (!group.isTrackSupported(i)) continue;
+                Format format = group.getTrackFormat(i);
+                String label = format.label != null ? format.label
+                        : format.language != null ? format.language
+                        : "Track " + labels.size();
+                labels.add(label);
+                groups.add(group);
+                trackIndices.add(i);
+            }
+        }
+
+        if (labels.size() == 1) {
+            Toast.makeText(this, "No subtitle tracks available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        int currentSelection = 0;
+        for (int j = 1; j < labels.size(); j++) {
+            if (groups.get(j).isTrackSelected(trackIndices.get(j))) {
+                currentSelection = j;
+                break;
+            }
+        }
+
+        final int[] selected = {currentSelection};
+        final List<Tracks.Group> finalGroups = groups;
+        final List<Integer> finalIndices = trackIndices;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Subtitles")
+                .setSingleChoiceItems(labels.toArray(new String[0]), currentSelection,
+                        (dialog, which) -> selected[0] = which)
+                .setPositiveButton("OK",
+                        (dialog, which) -> applySubtitleSelection(finalGroups, finalIndices, selected[0]))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void applySubtitleSelection(List<Tracks.Group> groups, List<Integer> indices, int selection) {
+        if (player == null) return;
+        TrackSelectionParameters.Builder builder = player.getTrackSelectionParameters()
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT);
+        if (selection == 0) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+        } else {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(new TrackSelectionOverride(
+                            groups.get(selection).getMediaTrackGroup(), indices.get(selection)));
+        }
+        player.setTrackSelectionParameters(builder.build());
     }
 
     private void initializePlayer() {
