@@ -13,7 +13,7 @@
 ### Build & Tooling
 - ~~**CompileSdk:** done (35)~~
 - **Add unit tests:** Currently none exist
-- **CI/CD:** GitHub Actions for automated builds
+- ~~**CI/CD:** GitHub Actions for automated builds~~
 
 ### Code Quality
 - **Coroutine adoption:** Replace raw Threads with structured concurrency
