@@ -1,12 +1,5 @@
 # SaucedplussyTV TODO / Roadmap
 
-## High Priority
-
-### Package Namespace Completion
-- **Status:** In progress (banner.png, icon.png done; colors remaining)
-- **Description:** Full rebrand from `ml.bmlzootown.hydravion` to `com.saucedplussytv.androidtv`
-- **Remaining:** `res/values/colors.xml` — brand colors
-
 ## Medium Priority
 
 ### Dependency Updates
@@ -35,8 +28,6 @@
 - **Recommendations:** Leanback recommendations row
 - **Multiple user profiles:** Switch between Sauce+ accounts
 - **Download/offline:** Cache videos for offline viewing
-- **Subtitle support:** CC/Subtitle track selection
-- **Playback speed:** 1.25x, 1.5x, 2x speed options
 
 ### UI/UX
 - **Dark theme variants:** True black for OLED TVs
@@ -61,3 +52,6 @@
 - [x] API host: floatplane.com → sauceplus.com
 - [x] App rebrand: Hydravion → SaucedplussyTV
 - [x] Package rename: ml.bmlzootown.hydravion → com.saucedplussytv.androidtv
+- [x] Brand colors: res/values/colors.xml updated
+- [x] Subtitle / CC track selection (Media3 TrackSelectionOverride)
+- [x] Playback speed control (0.5×–2×)
