@@ -51,10 +51,12 @@ internal class OkHttpStack(
 
         val response = client.newCall(builder.build()).execute()
         val headers = response.headers.map { Header(it.first, it.second) }
+        // OkHttp 5 guarantees a non-null body (empty for HEAD/204), unlike 4.x.
+        val body = response.body
         return HttpResponse(
             response.code, headers,
-            response.body?.contentLength()?.toInt() ?: -1,
-            response.body?.byteStream()
+            body.contentLength().toInt(),
+            body.byteStream()
         )
     }
 
