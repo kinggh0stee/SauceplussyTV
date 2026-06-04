@@ -1,19 +1,18 @@
 <resources>
     <!-- Brand colors -->
-    <color name="brand_primary">#1f2e3e</color>
-    <color name="brand_primary_dark">#161f2b</color>
-    <color name="brand_accent_warm">#e76f51</color>
-    <color name="brand_accent_gold">#f4a261</color>
-    <color name="brand_surface">#2a3f54</color>
+    <color name="brand_primary">#1A1A1A</color>
+    <color name="brand_primary_dark">#0F0F0F</color>
+    <color name="brand_accent">#F5B731</color>
+    <color name="brand_surface">#2D2D2D</color>
 
     <!-- App theme colors -->
-    <color name="background_gradient_start">#161f2b</color>
-    <color name="background_gradient_end">#2a3f54</color>
-    <color name="fastlane_background">#1f2e3e</color>
-    <color name="search_opaque">#e76f51</color>
-    <color name="selected_background">#e76f51</color>
-    <color name="default_background">#1f2e3e</color>
-    <color name="colorAccent">#e76f51</color>
+    <color name="background_gradient_start">#0F0F0F</color>
+    <color name="background_gradient_end">#1A1A1A</color>
+    <color name="fastlane_background">#F5B731</color>
+    <color name="search_opaque">#F5B731</color>
+    <color name="selected_background">#F5B731</color>
+    <color name="default_background">#0F0F0F</color>
+    <color name="colorAccent">#F5B731</color>
     <color name="chipTextColor">#FFFFFF</color>
-    <color name="chipColor">#1f2e3e</color>
+    <color name="chipColor">#2D2D2D</color>
 </resources>
