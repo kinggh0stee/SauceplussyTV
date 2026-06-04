@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "com.saucedplussytv.androidtv"
@@ -54,7 +54,7 @@ dependencies {
 
     // AndroidX
     implementation 'androidx.leanback:leanback:1.2.0'
-    implementation 'androidx.core:core-ktx:1.16.0'
+    implementation 'androidx.core:core-ktx:1.18.0'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'androidx.annotation:annotation:1.10.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
@@ -78,10 +78,10 @@ dependencies {
     implementation 'org.ocpsoft.prettytime:prettytime:5.0.0.Final'
 
     // Media3
-    implementation 'androidx.media3:media3-exoplayer:1.9.4'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.9.4'
-    implementation 'androidx.media3:media3-ui:1.9.4'
-    implementation 'androidx.media3:media3-session:1.9.4'
+    implementation 'androidx.media3:media3-exoplayer:1.10.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.10.1'
+    implementation 'androidx.media3:media3-ui:1.10.1'
+    implementation 'androidx.media3:media3-session:1.10.1'
 
     // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
