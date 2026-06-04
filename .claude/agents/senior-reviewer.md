@@ -4,6 +4,7 @@ description: >-
   FINAL reviewer and gatekeeper for ALL code changes in the SaucedplussyTV Android
   TV app. Delegates actual review to the opencode MCP `reviewer` agent (Kimi K2.6).
   Use this agent as step 3 of the mandatory workflow for every change.
+model: sonnet
 mode: all
 ---
 

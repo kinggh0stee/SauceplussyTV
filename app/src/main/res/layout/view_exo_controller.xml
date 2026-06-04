@@ -102,6 +102,13 @@
                 android:src="@drawable/exo_ic_speed"
                 android:tintMode="src_in" />
 
+            <ImageButton
+                android:id="@+id/exo_subtitles"
+                style="@style/ExoMediaButton"
+                android:src="@drawable/ic_subtitles"
+                android:tintMode="src_in"
+                android:contentDescription="Subtitles" />
+
         </LinearLayout>
 
         <LinearLayout
