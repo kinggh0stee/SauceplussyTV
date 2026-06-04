@@ -100,6 +100,9 @@ Sub-agents are defined in `.claude/agents/` with explicit model assignments:
 | `android-feature-dev` | sonnet | Leanback UI, presenters, playback, lifecycle |
 | `api-client` | sonnet | v3 API plumbing, models, auth/socket layer |
 | `rebrand-engineer` | haiku | Identity + endpoint changes (mechanical find-replace) |
+| `dependency-updater` | haiku | Bumps dependency versions in build.gradle, verifies compile |
+| `crash-triager` | sonnet | Maps logcat/stack traces to source, identifies root cause |
+| `security-reviewer` | **opus** | Audits auth/cookie/credential handling on auth-touching PRs |
 | `senior-reviewer` | sonnet | Final gate — delegates review to Kimi K2.6 |
 
 ### Mandatory workflow
