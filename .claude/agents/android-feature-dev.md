@@ -5,6 +5,7 @@ description: >-
   browse/grid UI, presenters and adapters, details/playback screens, ExoPlayer
   integration, settings, and lifecycle wiring. Use for UI and app-behavior work
   that is not primarily endpoint/identity (rebrand) or pure API-model work.
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

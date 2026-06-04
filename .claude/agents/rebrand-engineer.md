@@ -5,6 +5,7 @@ description: >-
   namespace, app name and user-facing strings, API/auth/socket endpoints
   (floatplane.com -> sauceplus.com), branding assets, and the update-check URL.
   Use for any task that changes the app's identity or endpoint configuration.
+model: haiku
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

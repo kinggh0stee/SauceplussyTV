@@ -7,6 +7,7 @@ description: >-
   cookie-session login (WebView harvesting sails.sid + cf_clearance, Turnstile
   captcha, 2FA) that replaces the dead OIDC/Keycloak device flow. Use when
   adding/changing endpoints, models, or any auth/cookie/session behavior.
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
