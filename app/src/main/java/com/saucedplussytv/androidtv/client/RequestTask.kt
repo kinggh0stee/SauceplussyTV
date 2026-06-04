@@ -74,6 +74,7 @@ class RequestTask(context: Context) {
             @Throws(AuthFailureError::class)
             override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
+        stringRequest.setShouldCache(false)
         volleyQueue.add(stringRequest)
     }
 
@@ -97,6 +98,7 @@ class RequestTask(context: Context) {
             override fun parseNetworkResponse(response: NetworkResponse?): Response<String> =
                 Response.success(String(response?.data ?: ByteArray(0)), null)
         }
+        jsonRequest.setShouldCache(false)
         volleyQueue.add(jsonRequest)
     }
 

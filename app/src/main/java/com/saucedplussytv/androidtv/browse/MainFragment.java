@@ -332,8 +332,6 @@ public class MainFragment extends BrowseSupportFragment {
             android.webkit.CookieManager.getInstance().removeAllCookies(null);
             android.webkit.CookieManager.getInstance().flush();
         }
-        // On session expiry we keep WebView cookies: cf_clearance survives so the
-        // Cloudflare Turnstile challenge is skipped on the next login.
 
         // Clear all in-memory data structures
         subscriptions.clear();
@@ -956,6 +954,7 @@ public class MainFragment extends BrowseSupportFragment {
         switch (action) {
             case REFRESH:
                 loadGeneration++;
+                subsRetryCount = 0;
                 videos.clear();
                 creatorPages.clear();
                 adapterInitialized = false;
