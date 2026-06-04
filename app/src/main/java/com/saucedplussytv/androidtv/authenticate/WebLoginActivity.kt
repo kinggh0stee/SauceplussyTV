@@ -261,7 +261,7 @@ class WebLoginActivity : ComponentActivity() {
             (function() {
                 try {
                     if (!window.$JS_BRIDGE_NAME) return;
-                    fetch('/api/v3/user/self', { credentials: 'include' })
+                    fetch('/api/v3/user/self', { credentials: 'include', cache: 'no-store' })
                         .then(function(r) { window.$JS_BRIDGE_NAME.onAuthResult('' + r.status); })
                         .catch(function() {});
                 } catch (e) {}

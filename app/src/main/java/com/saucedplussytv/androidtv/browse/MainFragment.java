@@ -99,6 +99,7 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean isLoggedIn = false;
     private boolean adapterInitialized = false;
     private int loadGeneration = 0;
+    private int subsRetryCount = 0;
 
     private ActivityResultLauncher<Intent> loginLauncher;
     private ActivityResultLauncher<Intent> detailLauncher;
@@ -199,6 +200,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void initialize() {
+        subsRetryCount = 0;
         refreshSubscriptions();
         prepareBackgroundManager();
         
@@ -309,12 +311,14 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     /**
-     * Session-expiry relink — clears only the stored token, NOT the WebView cookie jar.
-     * Preserving cf_clearance means Cloudflare's Turnstile challenge is skipped on the
-     * next login (the clearance is still valid), making re-authentication much faster.
+     * Session-expiry relink — clears both the stored token AND the WebView cookie jar.
+     * Sauce+ has no cf_clearance cookie (uses Private Access Tokens + _cfuvid instead),
+     * so preserving WebView cookies gives no benefit and causes a probe-fires-too-early
+     * loop: probeAuth() detects the stale __Host-sp-sess, acceptLogin() fires before the
+     * user can enter credentials, and the expired session is reused — looping forever.
      */
     private void relinkSession() {
-        doLogout(false);
+        doLogout(true);
     }
 
     private void doLogout(boolean clearWebCookies) {
@@ -367,6 +371,7 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Invalidate any in-flight getVideos callbacks from the previous session
         loadGeneration++;
+        subsRetryCount = 0;
 
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
@@ -409,6 +414,19 @@ public class MainFragment extends BrowseSupportFragment {
             if (loadGeneration != gen) return Unit.INSTANCE;
             if (!isAdded() || getContext() == null) return Unit.INSTANCE;
             if (subscriptions == null) {
+                // Retry a few times before showing the dialog — the session cookie can
+                // take several seconds to propagate to the backend after a fresh login.
+                if (subsRetryCount < 3) {
+                    subsRetryCount++;
+                    dLog(TAG, "getSubs returned null, retry " + subsRetryCount + "/3 in 3s");
+                    liveHandler.postDelayed(() -> {
+                        if (loadGeneration == gen && isLoggedIn && isAdded()) {
+                            refreshSubscriptions();
+                        }
+                    }, 3000);
+                    return Unit.INSTANCE;
+                }
+                subsRetryCount = 0;
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
                         .setMessage("Your SaucedplussyTV session has expired. Please log in again.")
@@ -422,6 +440,7 @@ public class MainFragment extends BrowseSupportFragment {
                         .create()
                         .show();
             } else {
+                subsRetryCount = 0;
                 if (subscriptions.length == 0) {
                     new AlertDialog.Builder(getContext())
                             .setTitle("No Subscriptions Found")

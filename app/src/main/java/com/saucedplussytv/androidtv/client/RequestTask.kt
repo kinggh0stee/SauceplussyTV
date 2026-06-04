@@ -9,7 +9,7 @@ import com.saucedplussytv.androidtv.authenticate.AuthManager
 
 class RequestTask(context: Context) {
 
-    private val volleyQueue: RequestQueue = Volley.newRequestQueue(context)
+    private val volleyQueue: RequestQueue = Volley.newRequestQueue(context, OkHttpStack())
 
     // SaucedplussyTV uses cookie-session auth behind Cloudflare. Each request sends the session
     // Cookie header (passed in as [sessionCookie]) plus the WebView's User-Agent, which
@@ -53,6 +53,7 @@ class RequestTask(context: Context) {
             }) {
             override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
+        stringRequest.setShouldCache(false)
         volleyQueue.add(stringRequest)
     }
 
@@ -112,6 +113,7 @@ class RequestTask(context: Context) {
 
             override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
+        stringRequest.setShouldCache(false)
         volleyQueue.add(stringRequest)
     }
 
