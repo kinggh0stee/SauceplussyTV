@@ -97,6 +97,7 @@ floatplane-openapi-specification-trimmed.json
 
 # Claude Code
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 
 # Reference material
 reference/
