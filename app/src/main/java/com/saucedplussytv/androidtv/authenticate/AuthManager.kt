@@ -1,5 +1,6 @@
 package com.saucedplussytv.androidtv.authenticate
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
@@ -106,6 +107,7 @@ class AuthManager private constructor(private val context: Context) {
     }
 
     companion object {
+        @SuppressLint("StaticFieldLeak") // applicationContext only — no leak
         @Volatile
         private var INSTANCE: AuthManager? = null
 

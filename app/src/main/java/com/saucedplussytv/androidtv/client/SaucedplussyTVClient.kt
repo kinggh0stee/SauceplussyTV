@@ -1,5 +1,6 @@
 package com.saucedplussytv.androidtv.client
 
+import android.annotation.SuppressLint
 import android.content.Context
 import com.android.volley.VolleyError
 import com.google.common.reflect.TypeToken
@@ -564,6 +565,7 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
         private const val URI_UPDATE_PROGRESS = "$SITE/api/v3/content/progress"
 
         private const val LATEST = "https://api.github.com/repos/kinggh0stee/Sauce-AndroidTV/releases/latest"
+        @SuppressLint("StaticFieldLeak") // applicationContext only — no leak
         private var INSTANCE: SaucedplussyTVClient? = null
 
         @Synchronized
