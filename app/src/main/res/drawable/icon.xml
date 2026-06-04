@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App / activity icon + Leanback browse badge. The "jank" S+ TV logo,
+  scaled to fill the canvas (transparent background so it overlays
+  cleanly as a badge). Replaces the deleted icon.png.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.44"
+        android:scaleY="1.44"
+        android:translateX="8"
+        android:translateY="2">
+        <!-- TV frame outline -->
+        <path
+            android:fillColor="#f4a261"
+            android:pathData="M4,8L60,8A4,4 0,0 1,64 12L64,52A4,4 0,0 1,60 56L4,56A4,4 0,0 1,0 52L0,12A4,4 0,0 1,4 8z" />
+        <!-- Screen fill -->
+        <path
+            android:fillColor="#1f2e3e"
+            android:pathData="M6,14L58,14A2,2 0,0 1,60 16L60,48A2,2 0,0 1,58 50L6,50A2,2 0,0 1,4 48L4,16A2,2 0,0 1,6 14z" />
+        <!-- S shape -->
+        <path
+            android:fillColor="#f4a261"
+            android:pathData="M18,22c-4.4,0 -8,3.6 -8,8c0,3.3 2,6.2 4.9,7.4c1.4,0.6 2.3,1.9 2.3,3.4c0,2.1 -1.7,3.8 -3.8,3.8h-0.5c-1.5,0 -2.6,1.2 -2.6,2.6s1.2,2.6 2.6,2.6h5.3c4.4,0 8,-3.6 8,-8c0,-3.3 -2,-6.2 -4.9,-7.4c-1.4,-0.6 -2.3,-1.9 -2.3,-3.4c0,-2.1 1.7,-3.8 3.8,-3.8h0.5c1.5,0 2.6,-1.2 2.6,-2.6s-1.2,-2.6 -2.6,-2.6z" />
+        <!-- Plus sign -->
+        <path
+            android:fillColor="#e76f51"
+            android:pathData="M44,24h-3v5h-5v3h5v5h3v-5h5v-3h-5z" />
+        <!-- Stand -->
+        <path
+            android:fillColor="#f4a261"
+            android:pathData="M26,56L38,56L42,64L22,64Z" />
+    </group>
+</vector>
