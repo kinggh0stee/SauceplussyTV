@@ -24,7 +24,7 @@ class GridItemPresenter : Presenter() {
         (viewHolder.view as TextView).text = item.toString()
     }
 
-    override fun onUnbindViewHolder(viewHolder: ViewHolder?) = Unit
+    override fun onUnbindViewHolder(viewHolder: ViewHolder) = Unit
 
     companion object {
 

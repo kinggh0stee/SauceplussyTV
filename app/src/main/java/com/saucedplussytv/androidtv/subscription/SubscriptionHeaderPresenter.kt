@@ -52,5 +52,5 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
         }
     }
 
-    override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder?) = Unit
+    override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) = Unit
 }
