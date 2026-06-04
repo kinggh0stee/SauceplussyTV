@@ -18,7 +18,7 @@
 ### Code Quality
 - **Coroutine adoption:** Replace raw Threads with structured concurrency
 - **SharedPreferences → DataStore:** Modern replacement
-- **Remove deprecated APIs:** Address deprecation warnings in build
+- ~~**Remove deprecated APIs:** Address deprecation warnings in build~~ 96→90 warnings; remainder blocked on compileSdk bump to 36/37
 
 ## Low Priority / Ideas
 
