@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__opencode__opencode_ask"
+    ]
+  }
+}
