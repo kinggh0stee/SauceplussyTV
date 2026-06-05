@@ -11,6 +11,9 @@ object Constants {
     const val PREF_SESSION_COOKIE = "session_cookie"
     const val PREF_USER_AGENT = "session_user_agent"
 
+    // DataStore filename for session credentials (replaces SharedPreferences).
+    val SESSION_DATASTORE_NAME = "session_prefs"
+
     const val REQ_CODE_DETAIL = 1
     const val REQ_CODE_LOGIN = 42
 }

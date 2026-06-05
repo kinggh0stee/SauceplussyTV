@@ -2,7 +2,6 @@ package com.saucedplussytv.androidtv.client
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Log
 import com.google.gson.Gson
 import io.socket.client.IO
@@ -21,9 +20,9 @@ import java.net.URI
 import java.util.*
 
 
-class SocketClient private constructor(private val context: Context, private val mainPrefs: SharedPreferences) {
+class SocketClient private constructor(private val context: Context) {
 
-    private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
+    private val authManager: AuthManager = AuthManager.getInstance(context)
 
      // Initialize the WebSocket connection, ensuring we use a fresh access token.
     fun initialize(onReady: (Socket?) -> Unit) {
@@ -103,10 +102,10 @@ class SocketClient private constructor(private val context: Context, private val
         private var INSTANCE: SocketClient? = null
 
         @Synchronized
-        fun getInstance(context: Context, mainPrefs: SharedPreferences): SocketClient {
+        fun getInstance(context: Context): SocketClient {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    INSTANCE = SocketClient(context.applicationContext, mainPrefs)
+                    INSTANCE = SocketClient(context.applicationContext)
                 }
             }
 
