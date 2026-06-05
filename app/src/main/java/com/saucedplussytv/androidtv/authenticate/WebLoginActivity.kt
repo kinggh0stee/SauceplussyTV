@@ -17,6 +17,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.lifecycleScope
 import com.saucedplussytv.androidtv.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -274,7 +275,9 @@ class WebLoginActivity : ComponentActivity() {
         @android.webkit.JavascriptInterface
         fun onAuthResult(status: String) {
             if (completed || status != "200") return
-            lifecycleScope.launch {
+            // Called from WebView JS thread — use Dispatchers.Main to match the original
+            // Handler(Looper.getMainLooper()).post { } guarantee.
+            lifecycleScope.launch(Dispatchers.Main) {
                 if (completed || isFinishing || isDestroyed) return@launch
                 CookieManager.getInstance().flush()
                 val cookieHeader = CookieManager.getInstance().getCookie(SITE)
