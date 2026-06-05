@@ -2,7 +2,6 @@ package com.saucedplussytv.androidtv.playback;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -78,7 +77,7 @@ public class PlaybackActivity extends FragmentActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
+        client = SaucedplussyTVClient.Companion.getInstance(this);
         setContentView(R.layout.activity_player);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -314,7 +313,7 @@ public class PlaybackActivity extends FragmentActivity {
             return;
         }
 
-        AuthManager authManager = AuthManager.Companion.getInstance(this, getPreferences(Context.MODE_PRIVATE));
+        AuthManager authManager = AuthManager.Companion.getInstance(this);
         authManager.withValidAccessToken(accessToken -> {
             // Check if initialization was cancelled or activity is no longer valid
             if (!initializationInProgress || isFinishing() || isDestroyed()) {

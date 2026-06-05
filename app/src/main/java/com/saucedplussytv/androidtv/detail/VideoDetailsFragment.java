@@ -1,7 +1,6 @@
 package com.saucedplussytv.androidtv.detail;
 
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -101,7 +100,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(requireContext(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+        client = SaucedplussyTVClient.Companion.getInstance(requireContext());
         initializeBackground();
     }
 

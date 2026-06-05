@@ -1,6 +1,5 @@
 package com.saucedplussytv.androidtv.card
 
-import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.text.TextUtils
@@ -18,7 +17,6 @@ import androidx.core.view.isGone
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.leanback.widget.Presenter
-import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
@@ -67,14 +65,12 @@ class CardPresenter(private val videoProgress: List<VideoProgress>) : Presenter(
         /**
          * Colors and objects that need context
          */
-        private var defaultPrefs: SharedPreferences
         private var selectedBackgroundColor: Int = -1
         private var defaultBackgroundColor: Int = -1
         private var defaultCardImage: Drawable? = null
 
         init {
             rootView.context.run {
-                defaultPrefs = PreferenceManager.getDefaultSharedPreferences(this)
                 defaultBackgroundColor = ContextCompat.getColor(this, R.color.default_background)
                 selectedBackgroundColor = ContextCompat.getColor(this, R.color.selected_background)
 

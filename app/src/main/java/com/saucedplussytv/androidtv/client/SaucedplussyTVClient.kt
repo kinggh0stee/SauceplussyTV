@@ -1,7 +1,6 @@
 package com.saucedplussytv.androidtv.client
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.android.volley.VolleyError
 import com.google.common.reflect.TypeToken
 import com.google.gson.Gson
@@ -19,12 +18,12 @@ import com.saucedplussytv.androidtv.subscription.Subscription
 import org.json.JSONArray
 import org.json.JSONObject
 
-class SaucedplussyTVClient private constructor(private val context: Context, private val mainPrefs: SharedPreferences) {
+class SaucedplussyTVClient private constructor(private val context: Context) {
 
     private val creatorIds: MutableMap<String, String> = hashMapOf()
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
     private val requestTask: RequestTask = RequestTask(context)
-    private val authManager: AuthManager = AuthManager.getInstance(context, mainPrefs)
+    private val authManager: AuthManager = AuthManager.getInstance(context)
     private val gson = Gson()
 
     fun getSubs(callback: (Array<Subscription>?) -> Unit) {
@@ -568,10 +567,10 @@ class SaucedplussyTVClient private constructor(private val context: Context, pri
         private var INSTANCE: SaucedplussyTVClient? = null
 
         @Synchronized
-        fun getInstance(context: Context, mainPrefs: SharedPreferences): SaucedplussyTVClient {
+        fun getInstance(context: Context): SaucedplussyTVClient {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    INSTANCE = SaucedplussyTVClient(context.applicationContext, mainPrefs)
+                    INSTANCE = SaucedplussyTVClient(context.applicationContext)
                 }
             }
 

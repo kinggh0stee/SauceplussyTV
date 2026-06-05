@@ -6,7 +6,6 @@ import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -115,8 +114,7 @@ public class MainFragment extends BrowseSupportFragment {
                     String sessionCookie = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_SESSION_COOKIE);
                     String userAgent = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_USER_AGENT);
                     if (sessionCookie != null && !sessionCookie.isEmpty()) {
-                        AuthManager authManager = AuthManager.Companion.getInstance(
-                            requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+                        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
                         authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
                         isLoggedIn = true;
                         // Brief delay: cf_clearance needs ~1s to propagate across CF's CDN
@@ -146,8 +144,8 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onViewCreated(@NonNull android.view.View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
-        socketClient = SocketClient.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+        client = SaucedplussyTVClient.Companion.getInstance(requireActivity());
+        socketClient = SocketClient.Companion.getInstance(requireActivity());
         checkLogin();
 
         client.getLatest(v -> {
@@ -172,7 +170,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void checkLogin() {
-        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), requireActivity().getPreferences(Context.MODE_PRIVATE));
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
         authManager.withValidAccessToken(accessToken -> {
             dLog("LOGIN", "Access token valid (or refreshed successfully)");
             isLoggedIn = true;
@@ -320,10 +318,8 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void doLogout(boolean clearWebCookies) {
-        SharedPreferences prefs = requireActivity().getPreferences(Context.MODE_PRIVATE);
-
         // Clear the stored Sauce+ session cookie / User-Agent.
-        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity(), prefs);
+        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
         authManager.clearTokens();
 
         if (clearWebCookies) {
