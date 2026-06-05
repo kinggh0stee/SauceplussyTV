@@ -137,9 +137,10 @@ private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataS
         listOf(
             SharedPreferencesMigration(
                 context,
-                // Activity.getPreferences(MODE_PRIVATE) names the file after the fully-qualified
-                // Activity class name — this is the file MainActivity historically wrote to.
-                "com.saucedplussytv.androidtv.browse.MainActivity",
+                // Activity.getPreferences(MODE_PRIVATE) calls getSharedPreferences(getLocalClassName(), mode).
+                // getLocalClassName() returns the class name relative to the package — "browse.MainActivity" —
+                // not the fully-qualified name, so this is the correct on-disk filename.
+                "browse.MainActivity",
                 keysToMigrate = setOf(Constants.PREF_SESSION_COOKIE, Constants.PREF_USER_AGENT)
             )
         )
