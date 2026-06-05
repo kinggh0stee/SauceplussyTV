@@ -82,6 +82,10 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-hls:1.10.1'
     implementation 'androidx.media3:media3-ui:1.10.1'
     implementation 'androidx.media3:media3-session:1.10.1'
+    // OkHttp-backed data source: www.sauceplus.com is behind Cloudflare, which blocks
+    // Media3's default HttpURLConnection stack (the AES-128 key request 403s). OkHttp's
+    // TLS fingerprint passes CF, same as OkHttpStack does for the API.
+    implementation 'androidx.media3:media3-datasource-okhttp:1.10.1'
 
     // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.1.1'

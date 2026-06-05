@@ -27,7 +27,8 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
-import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.ResolvingDataSource;
+import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
@@ -326,13 +327,31 @@ public class PlaybackActivity extends FragmentActivity {
             player.seekTo(currentWindow, playbackPosition);
             playerView.setPlayer(player);
 
-            DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory();
-            // Sauce+ cookie-session auth: pass the session Cookie + matching User-Agent so the
-            // CDN/Cloudflare accept the request. (accessToken carries the Cookie header value.)
+            // OkHttp transport so requests to www.sauceplus.com (the AES key host, behind
+            // Cloudflare) pass CF — Media3's default HttpURLConnection stack gets a 403 there.
+            okhttp3.OkHttpClient okHttpClient = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build();
+            OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(okHttpClient);
+            // Sauce+ cookie-session auth: pass the session Cookie + matching User-Agent.
+            // (accessToken carries the Cookie header value.)
             HashMap<String, String> headers = new HashMap<>();
             headers.put("Cookie", accessToken);
             headers.put("User-Agent", authManager.getUserAgent());
-            dataSourceFactory.setDefaultRequestProperties(headers);
+            httpDataSourceFactory.setDefaultRequestProperties(headers);
+
+            // Encrypted HLS: the playlist's #EXT-X-KEY points the AES-128 decryption key at
+            // www.floatplane.com, but our session cookie is only valid on www.sauceplus.com
+            // (Sauce+ is a white-label Floatplane). Without rewriting, the key request returns
+            // 403 notLoggedInError and playback fails with "Source error". Rewrite only that
+            // host; the CDN host (cdn-vod-drm2.floatplane.com) auths via its own URL token and
+            // must be left untouched.
+            ResolvingDataSource.Factory dataSourceFactory = new ResolvingDataSource.Factory(
+                    httpDataSourceFactory,
+                    dataSpec -> "www.floatplane.com".equals(dataSpec.uri.getHost())
+                            ? dataSpec.withUri(dataSpec.uri.buildUpon().authority("www.sauceplus.com").build())
+                            : dataSpec);
 
             int flags = DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS;
             DefaultHlsExtractorFactory extractorFactory = new DefaultHlsExtractorFactory(flags, true);
@@ -347,7 +366,19 @@ public class PlaybackActivity extends FragmentActivity {
 
                 @Override
                 public void onPlayerError(@NonNull PlaybackException error) {
-                    MainFragment.dError("EXOPLAYER", error.getLocalizedMessage());
+                    MainFragment.dError("EXOPLAYER", error.getErrorCodeName() + ": " + error.getMessage());
+                    Throwable cause = error.getCause();
+                    while (cause != null) {
+                        MainFragment.dError("EXOPLAYER", "  caused by " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                        if (cause instanceof androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                            androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException http =
+                                    (androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) cause;
+                            // Log host+path only — never the query string (carries access tokens).
+                            MainFragment.dError("EXOPLAYER", "  HTTP " + http.responseCode + " on "
+                                    + http.dataSpec.uri.getHost() + http.dataSpec.uri.getPath());
+                        }
+                        cause = cause.getCause();
+                    }
                     if (video != null) {
                         releasePlayer();
                         Toast.makeText(PlaybackActivity.this, "Video could not be played!", Toast.LENGTH_LONG).show();
