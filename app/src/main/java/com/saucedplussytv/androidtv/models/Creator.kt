@@ -11,4 +11,8 @@ class Creator : Serializable {
     @SerializedName("id")
     @Expose
     var id: String = ""
+
+    @SerializedName("title")
+    @Expose
+    var title: String = ""
 }

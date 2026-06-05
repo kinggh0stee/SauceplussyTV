@@ -633,9 +633,10 @@ public class MainFragment extends BrowseSupportFragment {
                 rowVids.forEach(listRowAdapter::add);
             }
 
-            String planTitle = (sub.getPlan() != null && sub.getPlan().getTitle() != null)
-                    ? sub.getPlan().getTitle() : "";
-            HeaderItem header = new HeaderItem(i, planTitle);
+            String creatorTitle = client.getCreatorTitle(sub.getCreator() != null ? sub.getCreator() : "");
+            String headerTitle = (!creatorTitle.isEmpty()) ? creatorTitle
+                    : (sub.getPlan() != null && sub.getPlan().getTitle() != null) ? sub.getPlan().getTitle() : "";
+            HeaderItem header = new HeaderItem(i, headerTitle);
             rowsAdapter.add(new ListRow(header, listRowAdapter));
         }
 

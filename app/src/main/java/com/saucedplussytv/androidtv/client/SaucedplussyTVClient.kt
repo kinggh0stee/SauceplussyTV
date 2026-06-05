@@ -46,18 +46,26 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                 }
 
                 gson.fromJson(response, Array<Subscription>::class.java).let { subs ->
+                    // Count subs with a creator so we know when all getCreatorById calls
+                    // have completed before handing subs to the UI (row headers need creator
+                    // titles from the cache, which isn't populated until each call returns).
+                    val withCreator = subs.filter { it.creator != null }
+                    if (withCreator.isEmpty()) {
+                        callback(subs)
+                        return@let
+                    }
+                    val pending = java.util.concurrent.atomic.AtomicInteger(withCreator.size)
                     subs.forEach { sub ->
                         sub.creator?.let { creatorId ->
-                            creatorIds[sub.plan?.title.toString()] = creatorId
-                            // Single request handles both logo caching and stream-info retrieval.
+                            creatorIds[creatorId] = creatorId
                             // getCreatorById uses the cache on repeat calls, avoiding duplicate
                             // requests when getSubs is called multiple times (e.g. on refresh).
                             getCreatorById(creatorId) { creator ->
                                 sub.streamInfo = creator?.lastLiveStream
+                                if (pending.decrementAndGet() == 0) callback(subs)
                             }
                         }
                     }
-                    callback(subs)
                 }
             }
 
@@ -336,6 +344,8 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
     fun getCreatorByName(name: String, callback: (Creator) -> Unit) {
         getCreatorById(creatorIds[name] ?: "", callback)
     }
+
+    fun getCreatorTitle(id: String): String = creatorCache[id]?.name ?: ""
 
     fun getCreatorById(id: String, callback: (Creator) -> Unit) {
         if (id.isNotEmpty()) {
