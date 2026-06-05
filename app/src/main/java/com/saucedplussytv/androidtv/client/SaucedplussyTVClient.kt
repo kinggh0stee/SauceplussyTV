@@ -21,7 +21,6 @@ import org.json.JSONObject
 
 class SaucedplussyTVClient private constructor(private val context: Context) {
 
-    private val creatorIds: MutableMap<String, String> = hashMapOf()
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
     private val requestTask: RequestTask = RequestTask(context)
     private val authManager: AuthManager = AuthManager.getInstance(context)
@@ -46,23 +45,21 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                 }
 
                 gson.fromJson(response, Array<Subscription>::class.java).let { subs ->
-                    // Count subs with a creator so we know when all getCreatorById calls
-                    // have completed before handing subs to the UI (row headers need creator
-                    // titles from the cache, which isn't populated until each call returns).
-                    val withCreator = subs.filter { it.creator != null }
+                    // Wait for all creator-info fetches before handing subs to the UI so row
+                    // headers can read creator titles from the cache when buildRows runs.
+                    val withCreator = subs.filter { !it.creator.isNullOrEmpty() }
                     if (withCreator.isEmpty()) {
                         callback(subs)
                         return@let
                     }
-                    val pending = java.util.concurrent.atomic.AtomicInteger(withCreator.size)
+                    var pending = withCreator.size
                     subs.forEach { sub ->
-                        sub.creator?.let { creatorId ->
-                            creatorIds[creatorId] = creatorId
+                        if (!sub.creator.isNullOrEmpty()) {
                             // getCreatorById uses the cache on repeat calls, avoiding duplicate
                             // requests when getSubs is called multiple times (e.g. on refresh).
-                            getCreatorById(creatorId) { creator ->
-                                sub.streamInfo = creator?.lastLiveStream
-                                if (pending.decrementAndGet() == 0) callback(subs)
+                            getCreatorById(sub.creator!!) { creator ->
+                                sub.streamInfo = creator.lastLiveStream
+                                if (--pending == 0) callback(subs)
                             }
                         }
                     }
@@ -342,7 +339,7 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
     }
 
     fun getCreatorByName(name: String, callback: (Creator) -> Unit) {
-        getCreatorById(creatorIds[name] ?: "", callback)
+        callback(creatorCache.values.firstOrNull { it.name == name } ?: Creator())
     }
 
     fun getCreatorTitle(id: String): String = creatorCache[id]?.name ?: ""
@@ -353,6 +350,8 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
             creatorCache[id]?.let { callback(it) } ?: run {
                 cacheLogo(id, callback)
             }
+        } else {
+            callback(Creator())
         }
     }
 
@@ -370,12 +369,16 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
 
                 override fun onSuccess(response: String) {
                     try {
-                        parseCreator(response)?.let { creator ->
+                        val creator = parseCreator(response)
+                        if (creator != null) {
                             creatorCache[creatorGUID] = creator
                             callback?.invoke(creator)
+                        } else {
+                            callback?.invoke(Creator())
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        callback?.invoke(Creator())
                     }
                 }
 
@@ -383,10 +386,12 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
 
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
-                override fun onError(error: VolleyError) = Unit
+                override fun onError(error: VolleyError) {
+                    callback?.invoke(Creator())
+                }
             })
         }, {
-            // no-op
+            callback?.invoke(Creator())
         })
     }
 
