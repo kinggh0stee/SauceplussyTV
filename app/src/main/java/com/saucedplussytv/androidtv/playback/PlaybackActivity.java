@@ -71,6 +71,12 @@ public class PlaybackActivity extends FragmentActivity {
     private boolean playerInitialized = false;
     private boolean initializationInProgress = false;
 
+    // Shared across all playback sessions — OkHttpClient owns connection/thread pools.
+    private static final okhttp3.OkHttpClient OK_HTTP_CLIENT = new okhttp3.OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build();
+
     private String url = "";
     private Video video;
 
@@ -329,11 +335,7 @@ public class PlaybackActivity extends FragmentActivity {
 
             // OkHttp transport so requests to www.sauceplus.com (the AES key host, behind
             // Cloudflare) pass CF — Media3's default HttpURLConnection stack gets a 403 there.
-            okhttp3.OkHttpClient okHttpClient = new okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .build();
-            OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(okHttpClient);
+            OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(OK_HTTP_CLIENT);
             // Sauce+ cookie-session auth: pass the session Cookie + matching User-Agent.
             // (accessToken carries the Cookie header value.)
             HashMap<String, String> headers = new HashMap<>();
