@@ -165,7 +165,12 @@ class WebLoginActivity : ComponentActivity() {
                 pollUrl?.let { maybeFinish(it) }
 
                 if (!completed) {
-                    CookieManager.getInstance().flush()
+                    // No flush() here: getCookie() reads the in-memory jar (flush only
+                    // persists to disk), so sid-change detection still sees the latest
+                    // value. acceptLogin() flushes once when login is actually accepted,
+                    // which is the only point persistence matters. Flushing on every poll
+                    // is synchronous disk I/O on the main thread and made WebView text
+                    // input laggy on low-power TV devices.
                     val cookieHeader = CookieManager.getInstance().getCookie(SITE)
                     val currentSid = extractSidValue(cookieHeader)
                     val baseline = initialSidValue
@@ -185,7 +190,7 @@ class WebLoginActivity : ComponentActivity() {
                     }
                 }
 
-                delay(1000)
+                delay(2000)
             }
         }
 
