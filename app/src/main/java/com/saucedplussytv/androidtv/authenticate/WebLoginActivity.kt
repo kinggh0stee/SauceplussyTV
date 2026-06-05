@@ -3,8 +3,6 @@ package com.saucedplussytv.androidtv.authenticate
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
@@ -17,7 +15,11 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.lifecycle.lifecycleScope
 import com.saucedplussytv.androidtv.R
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Cookie-session login for SaucedplussyTV (Sauce+ / white-label Floatplane).
@@ -42,7 +44,6 @@ class WebLoginActivity : ComponentActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var loadingOverlay: android.view.ViewGroup
     @Volatile private var completed = false
-    private val pollHandler = Handler(Looper.getMainLooper())
 
     /** Session-cookie value captured after the login page first loads; changes on successful auth. */
     private var initialSidValue: String? = null
@@ -150,9 +151,10 @@ class WebLoginActivity : ComponentActivity() {
         // 2. Retry the URL check after the cookie race window (webView.url may be stale
         //    after pushState; lastNavigatedUrl is used instead).
         // 3. Detect sails.sid value change for SPAs that never navigate away from /login.
-        pollHandler.postDelayed(object : Runnable {
-            override fun run() {
-                if (completed || isFinishing || isDestroyed) return
+        lifecycleScope.launch {
+            delay(2000)
+            while (isActive) {
+                if (completed || isFinishing || isDestroyed) break
 
                 // Authoritative check: ask the page whether /api/v3/user/self returns 200.
                 probeAuth()
@@ -182,9 +184,9 @@ class WebLoginActivity : ComponentActivity() {
                     }
                 }
 
-                if (!completed) pollHandler.postDelayed(this, 1000)
+                delay(1000)
             }
-        }, 2000)
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -223,7 +225,10 @@ class WebLoginActivity : ComponentActivity() {
 
         // On a valid non-login route but cookie not yet available — schedule retries.
         if (retryCount < 5) {
-            pollHandler.postDelayed({ maybeFinish(url, retryCount + 1) }, 300)
+            lifecycleScope.launch {
+                delay(300)
+                maybeFinish(url, retryCount + 1)
+            }
         }
     }
 
@@ -269,8 +274,8 @@ class WebLoginActivity : ComponentActivity() {
         @android.webkit.JavascriptInterface
         fun onAuthResult(status: String) {
             if (completed || status != "200") return
-            pollHandler.post {
-                if (completed || isFinishing || isDestroyed) return@post
+            lifecycleScope.launch {
+                if (completed || isFinishing || isDestroyed) return@launch
                 CookieManager.getInstance().flush()
                 val cookieHeader = CookieManager.getInstance().getCookie(SITE)
                 if (!extractSidValue(cookieHeader).isNullOrEmpty()) {
@@ -297,7 +302,6 @@ class WebLoginActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        pollHandler.removeCallbacksAndMessages(null)
         webView.destroy()
         super.onDestroy()
     }
