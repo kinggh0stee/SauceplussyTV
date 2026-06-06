@@ -8,7 +8,7 @@ import androidx.leanback.widget.RowPresenter
 import com.saucedplussytv.androidtv.R
 import com.saucedplussytv.androidtv.models.Video
 
-private class BrowseViewClickListener(
+internal class BrowseViewClickListener(
     private val context: Context,
     private val onVideoSelected: (Presenter.ViewHolder?, Video) -> Unit,
     private val onSettingsSelected: (SettingsAction) -> Unit

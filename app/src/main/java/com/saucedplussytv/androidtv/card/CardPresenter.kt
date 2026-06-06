@@ -26,7 +26,11 @@ import com.saucedplussytv.androidtv.ext.getTagColor
 import com.saucedplussytv.androidtv.models.Video
 import com.saucedplussytv.androidtv.models.VideoProgress
 
-class CardPresenter(private val videoProgress: List<VideoProgress>) : Presenter() {
+class CardPresenter(private var videoProgress: List<VideoProgress>) : Presenter() {
+
+    fun updateProgress(newProgress: List<VideoProgress>) {
+        videoProgress = newProgress
+    }
 
     /** Custom ViewHolder that keeps a stable CardViewHolder reference for onViewFocused. */
     private class CardPresenterViewHolder(view: View, val card: CardViewHolder) : ViewHolder(view)

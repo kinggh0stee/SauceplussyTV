@@ -4,7 +4,6 @@ import static android.app.Activity.RESULT_OK;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -24,6 +23,7 @@ import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.HeaderItem;
 import androidx.leanback.widget.ListRow;
 import androidx.leanback.widget.ListRowPresenter;
+import androidx.leanback.widget.PageRow;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.PresenterSelector;
 
@@ -37,7 +37,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.NavigableMap;
-import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -47,19 +46,14 @@ import io.socket.client.Socket;
 import io.socket.emitter.Emitter;
 import kotlin.Unit;
 import com.saucedplussytv.androidtv.BuildConfig;
-import com.saucedplussytv.androidtv.Constants;
 import com.saucedplussytv.androidtv.R;
 import com.saucedplussytv.androidtv.authenticate.AuthManager;
-import com.saucedplussytv.androidtv.card.CardPresenter;
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient;
 import com.saucedplussytv.androidtv.client.SocketClient;
 import com.saucedplussytv.androidtv.client.SyncEvent;
 import com.saucedplussytv.androidtv.client.UserSync;
-import com.saucedplussytv.androidtv.creator.FloatplaneLiveStream;
 import com.saucedplussytv.androidtv.detail.DetailsActivity;
 import com.saucedplussytv.androidtv.ext.MapExtensionKt;
-import com.saucedplussytv.androidtv.models.ChildImage;
-import com.saucedplussytv.androidtv.models.Creator;
 import com.saucedplussytv.androidtv.models.Delivery;
 import com.saucedplussytv.androidtv.models.Thumbnail;
 import com.saucedplussytv.androidtv.models.Video;
@@ -100,6 +94,11 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean adapterInitialized = false;
     private int loadGeneration = 0;
     private int subsRetryCount = 0;
+
+    private BrowseGridFragment gridFragment;
+    private List<Video> pendingBrowseVideos;
+    private boolean paginationInFlight = false;
+    private final HashMap<String, Boolean> exhaustedCreators = new HashMap<>();
 
     private ActivityResultLauncher<Intent> loginLauncher;
     private ActivityResultLauncher<Intent> detailLauncher;
@@ -147,6 +146,24 @@ public class MainFragment extends BrowseSupportFragment {
         super.onViewCreated(view, savedInstanceState);
         client = SaucedplussyTVClient.Companion.getInstance(requireActivity());
         socketClient = SocketClient.Companion.getInstance(requireActivity());
+
+        getMainFragmentRegistry().registerFragment(PageRow.class, new BrowseSupportFragment.FragmentFactory<BrowseGridFragment>() {
+            @Override
+            public BrowseGridFragment createFragment(Object rowObj) {
+                BrowseGridFragment frag = new BrowseGridFragment();
+                gridFragment = frag;
+                frag.setNearEndListener(MainFragment.this::onGridNearEnd);
+                frag.setOnItemViewClickedListener(new BrowseViewClickListener(requireContext(),
+                    MainFragment.this::onVideoSelected, MainFragment.this::onSettingsSelected));
+                if (pendingBrowseVideos != null) {
+                    frag.pendingVideos = pendingBrowseVideos;
+                    frag.pendingProgress = videoProgress;
+                    pendingBrowseVideos = null;
+                }
+                return frag;
+            }
+        });
+
         checkLogin();
 
         client.getLatest(v -> {
@@ -191,6 +208,7 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onDestroyView() {
         liveHandler.removeCallbacksAndMessages(null);
+        gridFragment = null;
         if (socket != null) {
             socket.disconnect();
             socket.off();
@@ -271,16 +289,20 @@ public class MainFragment extends BrowseSupportFragment {
             if (eventType.equalsIgnoreCase("CONTENT_LIVESTREAM_START")) {
                 dLog("SOCKET", "CONTENT_LIVESTREAM_START");
                 if (event.getData().getCreator() == null) return;
-                Integer row = getRow(event.getData().getCreator(), subscriptions);
                 Thumbnail th = new Thumbnail();
                 th.setPath(event.getData().getIcon());
-                if (strms.containsKey(row))
-                    strms.get(row).setThumbnail(th);
-
-                if (row != -1 && strms.containsKey(row)) {
-                    android.app.Activity activity = getActivity();
-                    if (activity != null) {
-                        activity.runOnUiThread(() -> addToRow(strms.get(row)));
+                // Find the stream in strms that belongs to this creator's subscription
+                String creatorId = event.getData().getCreator();
+                for (java.util.Map.Entry<Integer, Video> entry : strms.entrySet()) {
+                    Video stream = entry.getValue();
+                    if (stream != null && stream.getCreator() != null
+                            && creatorId.equalsIgnoreCase(stream.getCreator().getId())) {
+                        stream.setThumbnail(th);
+                        android.app.Activity activity = getActivity();
+                        if (activity != null) {
+                            activity.runOnUiThread(() -> addToRow(stream));
+                        }
+                        break;
                     }
                 }
             } else if (eventType.equalsIgnoreCase("CONTENT_POST_RELEASE")) {
@@ -288,12 +310,9 @@ public class MainFragment extends BrowseSupportFragment {
                 if (event.getData().getVideo() == null
                         || event.getData().getVideo().getGuid() == null) return;
                 client.getVideoObject(event.getData().getVideo().getGuid(), video -> {
-                    int row = getRow(video, subscriptions);
-                    if (row != -1) {
-                        android.app.Activity activity = getActivity();
-                        if (activity != null) {
-                            activity.runOnUiThread(() -> addToRow(video));
-                        }
+                    android.app.Activity activity = getActivity();
+                    if (activity != null) {
+                        activity.runOnUiThread(() -> addToRow(video));
                     }
                     return Unit.INSTANCE;
                 });
@@ -363,6 +382,12 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Reset adapter initialization flag
         adapterInitialized = false;
+
+        // Reset grid fragment state
+        gridFragment = null;
+        pendingBrowseVideos = null;
+        paginationInFlight = false;
+        exhaustedCreators.clear();
 
         // Reset UI initialization flag to allow proper setup on next login
         uiInitialized = false;
@@ -515,11 +540,11 @@ public class MainFragment extends BrowseSupportFragment {
             dLog(TAG, "Ignoring video update - user is logged out");
             return;
         }
-        if (vids == null) return;
 
         boolean isPagination = adapterInitialized && videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0;
-        int previousSize = (videos.get(creatorGUID) != null) ? videos.get(creatorGUID).size() : 0;
-        
+
+        if (vids == null) return;
+
         if (videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0) {
             videos.get(creatorGUID).addAll(Arrays.asList(vids));
         } else {
@@ -533,80 +558,76 @@ public class MainFragment extends BrowseSupportFragment {
             if (subCount > 1) {
                 subCount--;
             } else {
-                refreshVideoProgress();
                 subCount = subscriptions.size();
+                refreshRows();        // show grid immediately
+                fetchProgressAsync(); // update progress in background
             }
         }
     }
 
     private void refreshVideoProgress() {
         if (!isAdded() || getActivity() == null) return;
-        // Guard against refreshing progress if we're logged out
         if (!isLoggedIn) {
             dLog(TAG, "Ignoring video progress refresh - user is logged out");
             return;
         }
-        
+        fetchProgressAsync();
+    }
+
+    private void fetchProgressAsync() {
         client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(videos), progress -> {
-            // Double-check we're still logged in when callback executes
-            if (!isLoggedIn) {
-                dLog(TAG, "Ignoring video progress callback - user logged out during request");
-                return Unit.INSTANCE;
-            }
+            if (!isLoggedIn || !isAdded()) return Unit.INSTANCE;
             videoProgress = progress;
-            refreshRows();
+            BrowseGridFragment frag = gridFragment;
+            if (frag != null) frag.updateProgress(videoProgress);
             return Unit.INSTANCE;
         });
     }
 
-    private void refreshRows() {
-        if (!isAdded() || getActivity() == null) return;
-        // Guard against refreshing rows if we're logged out
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring row refresh - user is logged out");
-            return;
-        }
-        
-        ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
-        CardPresenter cardPresenter = new CardPresenter(videoProgress);
-
-        // Browse row: merge all fetched videos, sort by releaseDate descending, take first 20.
-        // releaseDate is ISO-8601 so lexicographic comparison is equivalent to chronological.
-        List<Video> allVideos = new ArrayList<>();
+    private List<Video> mergeSortAllVideos() {
+        List<Video> all = new ArrayList<>();
         for (List<Video> vids : videos.values()) {
-            if (vids != null) allVideos.addAll(vids);
+            if (vids != null) all.addAll(vids);
         }
-        allVideos.sort((a, b) -> {
+        all.sort((a, b) -> {
             String da = a.getReleaseDate() != null ? a.getReleaseDate() : "";
             String db = b.getReleaseDate() != null ? b.getReleaseDate() : "";
             return db.compareTo(da);
         });
-        ArrayObjectAdapter browseAdapter = new ArrayObjectAdapter(cardPresenter);
-        allVideos.subList(0, Math.min(20, allVideos.size())).forEach(browseAdapter::add);
-        rowsAdapter.add(new ListRow(new HeaderItem(0, getString(R.string.browse)), browseAdapter));
+        return all;
+    }
 
-        HeaderItem gridHeader = new HeaderItem(1, getString(R.string.settings));
+    private void refreshRows() {
+        if (!isAdded() || getActivity() == null) return;
+        if (!isLoggedIn) return;
 
-        GridItemPresenter mGridPresenter = new GridItemPresenter();
-        ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
-        gridRowAdapter.add(getResources().getString(R.string.refresh));
-        gridRowAdapter.add(getResources().getString(R.string.live_stream));
-        gridRowAdapter.add(getResources().getString(R.string.app_info));
-        gridRowAdapter.add(getResources().getString(R.string.logout));
-        rowsAdapter.add(new ListRow(gridHeader, gridRowAdapter));
+        List<Video> allVideos = mergeSortAllVideos();
 
-        boolean isFirstBuild = !adapterInitialized;
-        setAdapter(rowsAdapter);
-        adapterInitialized = true;
+        if (!adapterInitialized) {
+            ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
+            rowsAdapter.add(new PageRow(new HeaderItem(0, getString(R.string.browse))));
 
-        if (isFirstBuild) {
-            // Post so the RecyclerView layout pass completes before we request focus on a card.
-            // setSelectedPosition alone is enough — startHeadersTransition(false) is NOT called
-            // because it hides the header panel entirely and its timing is unreliable after
-            // setAdapter(), which left focus stuck at the row level with no left/right movement.
+            GridItemPresenter mGridPresenter = new GridItemPresenter();
+            ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
+            gridRowAdapter.add(getResources().getString(R.string.refresh));
+            gridRowAdapter.add(getResources().getString(R.string.live_stream));
+            gridRowAdapter.add(getResources().getString(R.string.app_info));
+            gridRowAdapter.add(getResources().getString(R.string.logout));
+            rowsAdapter.add(new ListRow(new HeaderItem(1, getString(R.string.settings)), gridRowAdapter));
+
+            setAdapter(rowsAdapter);
+            adapterInitialized = true;
+            pendingBrowseVideos = allVideos;
+
             liveHandler.post(() ->
-                setSelectedPosition(rowSelected, false, new ListRowPresenter.SelectItemViewHolderTask(colSelected))
+                setSelectedPosition(rowSelected, false, null)
             );
+        } else {
+            if (gridFragment != null) {
+                gridFragment.replaceVideos(allVideos, videoProgress);
+            } else {
+                pendingBrowseVideos = allVideos;
+            }
         }
     }
 
@@ -651,29 +672,10 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void appendVideosToRows() {
         if (!isLoggedIn) return;
-        ArrayObjectAdapter rowsAdapter = (ArrayObjectAdapter) getAdapter();
-        if (rowsAdapter == null || rowsAdapter.size() == 0) {
-            refreshVideoProgress();
-            return;
+        List<Video> allVideos = mergeSortAllVideos();
+        if (gridFragment != null) {
+            gridFragment.appendUniqueVideos(allVideos);
         }
-        // Browse row is always at index 0. Rebuild its content from the full merged+sorted pool.
-        ListRow browseRow = (ListRow) rowsAdapter.get(0);
-        if (browseRow == null) return;
-        ArrayObjectAdapter browseAdapter = (ArrayObjectAdapter) browseRow.getAdapter();
-        if (browseAdapter == null) return;
-
-        List<Video> allVideos = new ArrayList<>();
-        for (List<Video> vids : videos.values()) {
-            if (vids != null) allVideos.addAll(vids);
-        }
-        allVideos.sort((a, b) -> {
-            String da = a.getReleaseDate() != null ? a.getReleaseDate() : "";
-            String db = b.getReleaseDate() != null ? b.getReleaseDate() : "";
-            return db.compareTo(da);
-        });
-        List<Video> topVideos = allVideos.subList(0, Math.min(20, allVideos.size()));
-        browseAdapter.clear();
-        topVideos.forEach(browseAdapter::add);
     }
 
     private void addToRow(Video video) {
@@ -683,37 +685,56 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void addToBrowseRow(Video video) {
-        ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
-        if (rows == null || rows.size() == 0) return;
-        ListRow browseRow = (ListRow) rows.get(0);
-        if (browseRow == null) return;
-        ArrayObjectAdapter vids = (ArrayObjectAdapter) browseRow.getAdapter();
-        if (vids == null) return;
-        for (int z = 0; z < vids.size(); z++) {
-            if (((Video) vids.get(z)).getGuid().equalsIgnoreCase(video.getGuid())) return;
+        if (gridFragment != null) {
+            gridFragment.prependVideo(video);
         }
-        vids.add(0, video);
-        vids.notifyArrayItemRangeChanged(0, vids.size());
     }
 
-    private int getRow(Video video, List<Subscription> subs) {
-        int row = -1;
-        for (int i = 0; i < subs.size(); i++) {
-            if (subs.get(i).getCreator().equalsIgnoreCase(video.getCreator().getId())) {
-                row = i;
-            }
+    void onGridFragmentReady(BrowseGridFragment frag) {
+        gridFragment = frag;
+        if (pendingBrowseVideos != null && !pendingBrowseVideos.isEmpty()) {
+            frag.replaceVideos(pendingBrowseVideos, videoProgress);
+            pendingBrowseVideos = null;
         }
-        return row;
     }
 
-    private int getRow(String creatorGUID, List<Subscription> subs) {
-        int row = -1;
-        for (int i = 0; i < subs.size(); i++) {
-            if (subs.get(i).getCreator().equalsIgnoreCase(creatorGUID)) {
-                row = i;
+    private void onGridNearEnd() {
+        if (paginationInFlight || !isLoggedIn || subscriptions.isEmpty()) return;
+
+        // Pre-count creators to fetch so we can clear paginationInFlight only after all return.
+        int dispatchCount = 0;
+        for (Subscription sub : subscriptions) {
+            String creator = sub.getCreator();
+            if (creator != null && !Boolean.TRUE.equals(exhaustedCreators.get(creator))) {
+                dispatchCount++;
             }
         }
-        return row;
+        if (dispatchCount == 0) return;
+
+        paginationInFlight = true;
+        final int gen = loadGeneration;
+        final java.util.concurrent.atomic.AtomicInteger remaining =
+                new java.util.concurrent.atomic.AtomicInteger(dispatchCount);
+
+        for (Subscription sub : subscriptions) {
+            String creator = sub.getCreator();
+            if (creator == null || Boolean.TRUE.equals(exhaustedCreators.get(creator))) continue;
+            int nextPage = creatorPages.getOrDefault(creator, 1) + 1;
+            client.getVideos(creator, nextPage, vids -> {
+                if (loadGeneration != gen) {
+                    if (remaining.decrementAndGet() == 0) paginationInFlight = false;
+                    return Unit.INSTANCE;
+                }
+                if (vids == null || vids.length == 0) {
+                    exhaustedCreators.put(creator, true);
+                } else {
+                    creatorPages.put(creator, nextPage);
+                }
+                gotVideos(creator, vids);
+                if (remaining.decrementAndGet() == 0) paginationInFlight = false;
+                return Unit.INSTANCE;
+            });
+        }
     }
 
     private void prepareBackgroundManager() {
@@ -751,40 +772,8 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void setupEventListeners() {
         setOnItemViewClickedListener(new BrowseViewClickListener(requireContext(), this::onVideoSelected, this::onSettingsSelected));
-        setOnItemViewSelectedListener(new ItemViewSelectedListener(this::onCheckIndices, this::onRowSelected));
-    }
-
-    private Unit onCheckIndices(@NonNull String creator, int selected) {
-        colSelected = selected;
-
-        subscriptions.forEach(sub -> {
-            if (creator.equals(sub.getCreator())) {
-                rowSelected = subscriptions.indexOf(sub);
-            }
-        });
-        return Unit.INSTANCE;
-    }
-
-    private Unit onRowSelected() {
-        // Fetch the next page only for the creator whose row just hit the last item.
-        // (Previously fetched for all subscriptions and used a single page counter,
-        // skipping pages when more than one subscription is loaded.)
-        if (rowSelected < 0 || rowSelected >= subscriptions.size()) return Unit.INSTANCE;
-        String creator = subscriptions.get(rowSelected).getCreator();
-        if (creator == null) return Unit.INSTANCE;
-        int nextPage = creatorPages.getOrDefault(creator, 1) + 1;
-        final int gen = loadGeneration;
-        client.getVideos(creator, nextPage, vids -> {
-            if (loadGeneration != gen) return Unit.INSTANCE;
-            // Only advance the page counter when the request succeeds with data,
-            // so a network error doesn't permanently skip a page.
-            if (vids != null && vids.length > 0) {
-                creatorPages.put(creator, nextPage);
-            }
-            gotVideos(creator, vids);
-            return Unit.INSTANCE;
-        });
-        return Unit.INSTANCE;
+        // Item selection for the Settings ListRow (no-op for videos; grid handles its own selection)
+        setOnItemViewSelectedListener((itemViewHolder, item, rowViewHolder, row) -> {});
     }
 
     private Unit onVideoSelected(@Nullable Presenter.ViewHolder itemViewHolder, @NonNull Video video) {
@@ -852,7 +841,11 @@ public class MainFragment extends BrowseSupportFragment {
                 subsRetryCount = 0;
                 videos.clear();
                 creatorPages.clear();
+                exhaustedCreators.clear();
                 adapterInitialized = false;
+                gridFragment = null;
+                pendingBrowseVideos = null;
+                paginationInFlight = false;
                 rowSelected = 0;
                 colSelected = 0;
                 refreshSubscriptions();
