@@ -25,12 +25,12 @@ Sauce+ uses legacy cookie-session auth (not Keycloak/OIDC). Full recon: `referen
 
 **Login flow** (all under `https://www.sauceplus.com`):
 1. `GET /api/v3/auth/captcha/info` → Cloudflare Turnstile siteKey (delivered at runtime, not hardcoded).
-2. `POST /api/v3/auth/login` with `{ username, password, captchaToken }` → sets `sails.sid` cookie; may return `needs2FA`.
+2. `POST /api/v3/auth/login` with `{ username, password, captchaToken }` → sets `__Host-sp-sess` cookie; may return `needs2FA`.
 3. If 2FA: `POST /api/v3/auth/checkFor2faLogin` with `{ token }`.
 
 **Cloudflare:** the entire site is behind a bot challenge. API calls must carry a valid `cf_clearance` cookie with a **consistent User-Agent** matching the one that solved the challenge.
 
-**TV login:** `WebLoginActivity` loads `https://www.sauceplus.com/login` in a WebView. The user solves Turnstile + CF naturally. On success the activity harvests `sails.sid` + `cf_clearance` from `CookieManager` plus the WebView's `userAgentString`, stores them via `AuthManager.saveSession()`, and returns `RESULT_OK`. Success is detected by navigating off `/login` to an app route while `sails.sid` is present — no separate HTTP verification (CF TLS fingerprinting blocks it).
+**TV login:** `WebLoginActivity` loads `https://www.sauceplus.com/login` in a WebView. The user solves Turnstile + CF naturally. On success the activity harvests `__Host-sp-sess` + `cf_clearance` from `CookieManager` plus the WebView's `userAgentString`, stores them via `AuthManager.saveSession()`, and returns `RESULT_OK`. Success is detected by navigating off `/login` to an app route while `__Host-sp-sess` is present — no separate HTTP verification (CF TLS fingerprinting blocks it).
 
 ## Architecture
 
@@ -38,19 +38,19 @@ Sauce+ uses legacy cookie-session auth (not Keycloak/OIDC). Full recon: `referen
 
 - `browse/` — `MainActivity`, `MainFragment` (Leanback `BrowseSupportFragment`). `MainFragment` is the central coordinator: it holds both `SaucedplussyTVClient` and `SocketClient`, fetches subscriptions, populates Leanback `ArrayObjectAdapter` rows, and owns all click/selection listeners and the socket event loop.
 - `client/` — `SaucedplussyTVClient` (API facade, singleton), `RequestTask` (Volley HTTP, adds Cookie + UA headers to every request), `SocketClient` (socket.io live/sync, singleton), `SyncEvent`/`UserSync` (socket event DTOs).
-- `authenticate/` — `AuthManager` (stores `sails.sid`+UA in SharedPreferences, singleton), `WebLoginActivity` (WebView cookie harvest).
-- `playback/PlaybackActivity` — ExoPlayer 2.x screen. Injects `Cookie` + `User-Agent` into `DefaultHttpDataSource.Factory` so HLS segment requests also carry the session credential.
+- `authenticate/` — `AuthManager` (stores `__Host-sp-sess`+UA in DataStore, singleton), `WebLoginActivity` (WebView cookie harvest).
+- `playback/PlaybackActivity` — Media3 playback screen. Injects `Cookie` + `User-Agent` into the OkHttp-backed Media3 data source so HLS segment and AES-128 key requests carry the session credential.
 - `detail/` — `DetailsActivity` + `VideoDetailsFragment` (Leanback details screen).
 - `models/`, `creator/`, `post/`, `subscription/` — Gson DTOs.
-- `Constants.kt` — SharedPreferences key names (`PREF_SESSION_COOKIE`, `PREF_USER_AGENT`).
+- `Constants.kt` — DataStore/SharedPreferences key names (`PREF_SESSION_COOKIE`, `PREF_USER_AGENT`).
 
 ### Non-obvious cross-cutting patterns
 
-**Singleton access:** All three primary objects share the same `getInstance(context, mainPrefs)` factory:
+**Singleton access:** All three primary objects share the same `getInstance(context)` factory:
 ```kotlin
-SaucedplussyTVClient.getInstance(context, mainPrefs)
-AuthManager.getInstance(context, mainPrefs)
-SocketClient.getInstance(context, mainPrefs)
+SaucedplussyTVClient.getInstance(context)
+AuthManager.getInstance(context)
+SocketClient.getInstance(context)
 ```
 
 **All authed API calls gate on `AuthManager.withValidAccessToken { token -> }`**, which is synchronous (no network, no refresh). An empty cookie calls `onFailure`. Expired/invalid cookies cause downstream 401/403 → "Session Expired" dialog → re-login.
@@ -71,9 +71,9 @@ SocketClient.getInstance(context, mainPrefs)
 
 ## Tech stack
 
-- **Platform:** Android TV, AndroidX Leanback (D-pad only, no touch). `minSdk 26`, `target/compileSdk 34`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1, Kotlin 2.0.21.
+- **Platform:** Android TV, AndroidX Leanback (D-pad only, no touch). `minSdk 26`, `targetSdk 35`, `compileSdk 37`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1, Kotlin 2.4.0.
 - **Languages:** mixed Kotlin + Java — match the surrounding file's language.
-- **Playback:** ExoPlayer `2.19.1` (+ mediasession extension). **TODO:** Migrate to Media3.
+- **Playback:** AndroidX Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session, media3-datasource-okhttp).
 - **Networking:** Volley + OkHttp 5 + `socket.io-client 2.1.2`; Gson for JSON.
 - **UI/misc:** Glide (images), PrettyTime, NanoHTTPD (local server), versioncompare.
 - **ZXing** dependency is present but currently unused — QR features were removed with the Keycloak auth rewrite.

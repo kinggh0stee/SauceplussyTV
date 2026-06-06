@@ -73,10 +73,11 @@ JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:lint
 | Languages | Kotlin, Java |
 | Build System | Gradle 9.4.1 (Groovy DSL) |
 | Android Gradle Plugin | 9.2.1 |
-| Compile SDK | 36 |
+| Compile SDK | 37 |
+| Target SDK | 35 |
 | Min SDK | 26 |
 | Player | AndroidX Media3 (ExoPlayer-based) |
-| Networking | Volley 1.2.1, OkHttp 5, socket.io-client 2.x |
+| Networking | Volley 1.2.1, OkHttp 5.3.2, socket.io-client 2.1.2 |
 | Serialization | Gson |
 | Images | Glide 5 |
 

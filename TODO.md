@@ -17,9 +17,9 @@
 - ~~**CI/CD:** GitHub Actions for automated builds~~
 
 ### Code Quality
-- **Coroutine adoption:** Replace raw Threads with structured concurrency
-- **SharedPreferences → DataStore:** Modern replacement
-- **Deprecation cleanup:** Partially done (96→90 warnings); remaining warnings need compileSdk 36/37
+- ~~**Coroutine adoption:** done — AuthManager writes are now fire-and-forget `scope.launch`; no raw Threads exist~~
+- ~~**SharedPreferences → DataStore:** done — AuthManager fully migrated; zero SharedPreferences usages remain~~
+- **Deprecation cleanup:** Partially done (96→90 warnings); reassess with compileSdk 37
 
 ## Low Priority / Ideas
 

@@ -10,7 +10,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.SharedPreferencesMigration
 import com.saucedplussytv.androidtv.Constants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -18,7 +22,7 @@ import kotlinx.coroutines.runBlocking
  *
  * SaucedplussyTV uses the Sauce+ backend (white-label Floatplane) with cookie-session
  * auth (not OAuth/OIDC tokens). The credential is the `Cookie` header value harvested
- * from the WebView login ([WebLoginActivity]) — typically `sails.sid=...; cf_clearance=...`.
+ * from the WebView login ([WebLoginActivity]) — typically `__Host-sp-sess=...; cf_clearance=...`.
  * It is paired with the WebView's User-Agent, which must be reused on every request
  * so Cloudflare's `cf_clearance` cookie remains valid.
  *
@@ -40,7 +44,10 @@ class AuthManager private constructor(private val context: Context) {
     private val cookieKey = stringPreferencesKey(Constants.PREF_SESSION_COOKIE)
     private val uaKey = stringPreferencesKey(Constants.PREF_USER_AGENT)
 
-    /** In-memory cache populated once at construction via a blocking read. */
+    // Dedicated scope for fire-and-forget DataStore writes. SupervisorJob ensures one failed
+    // write does not cancel pending writes.
+    private val writeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     @Volatile
     private var cachedCookie: String
 
@@ -48,6 +55,7 @@ class AuthManager private constructor(private val context: Context) {
     private var cachedUserAgent: String
 
     init {
+        // One-time cold read to warm the in-memory cache on first getInstance(); fast (<10ms) and only runs once per process.
         val snapshot = runBlocking { dataStore.data.first() }
         cachedCookie = snapshot[cookieKey] ?: ""
         cachedUserAgent = snapshot[uaKey]?.takeIf { it.isNotEmpty() } ?: DEFAULT_USER_AGENT
@@ -70,22 +78,28 @@ class AuthManager private constructor(private val context: Context) {
         val ua = userAgent.takeIf { it.isNotEmpty() } ?: DEFAULT_USER_AGENT
         cachedCookie = cookieHeader
         cachedUserAgent = ua
-        runBlocking {
-            dataStore.edit { prefs ->
-                prefs[cookieKey] = cookieHeader
-                prefs[uaKey] = ua
-            }
+        // Cache updated above; write is fire-and-forget. A process kill before the write
+        // flushes forces a re-login on next start — benign, window is <50ms.
+        writeScope.launch {
+            runCatching {
+                dataStore.edit { prefs ->
+                    prefs[cookieKey] = cookieHeader
+                    prefs[uaKey] = ua
+                }
+            }.onFailure { Log.w(TAG, "saveSession: DataStore write failed") }
         }
     }
 
     fun clearTokens() {
         cachedCookie = ""
         cachedUserAgent = DEFAULT_USER_AGENT
-        runBlocking {
-            dataStore.edit { prefs ->
-                prefs.remove(cookieKey)
-                prefs.remove(uaKey)
-            }
+        writeScope.launch {
+            runCatching {
+                dataStore.edit { prefs ->
+                    prefs.remove(cookieKey)
+                    prefs.remove(uaKey)
+                }
+            }.onFailure { Log.w(TAG, "clearTokens: DataStore write failed") }
         }
     }
 
