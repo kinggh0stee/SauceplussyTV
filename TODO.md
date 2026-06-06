@@ -18,28 +18,53 @@
 ### Code Quality
 - **Coroutine adoption:** Replace raw Threads with structured concurrency
 - **SharedPreferences → DataStore:** Modern replacement
-- ~~**Remove deprecated APIs:** Address deprecation warnings in build~~ 96→90 warnings; remainder blocked on compileSdk bump to 36/37
+- **Deprecation cleanup:** Partially done (96→90 warnings); remaining warnings need compileSdk 36/37
 
 ## Low Priority / Ideas
 
-### Features
-- **Picture-in-Picture (PiP):** For Android TV background playback
-- **Search integration:** Android TV global search
-- **Recommendations:** Leanback recommendations row
-- **Multiple user profiles:** Switch between Sauce+ accounts
-- **Download/offline:** Cache videos for offline viewing
+### Features (from Sauce+ gap analysis)
 
-### UI/UX
-- **Dark theme variants:** True black for OLED TVs
-- **Customizable home screen:** Reorder subscription cards
-- **Watch history:** Better progress tracking UI
-- **Settings overhaul:** More granular playback settings
+> Unofficial client — **no** membership, billing, creator-tools, or account-management features.
+
+**Biggest UX holes (TV-appropriate):**
+- **Search** (`/api/v3/content/search`) — no search UI at all
+- **Subtitles / CC** (`/api/cms/v3/content/upload/texttrack`) — no text track selection
+- **Manual quality selection** — auto-picks highest enabled variant; no user override
+- **Watch history page** (`/api/v3/content/history`) — no "Continue watching" row
+
+**Playback polish:**
+- **Related content** (`/api/v3/content/related`) — "Up next" when a video ends
+- **Background audio playback** — keep audio playing when backgrounded
+- **Picture-in-Picture (PiP)** — Android TV background video
+- **Timeline sprites / trickplay thumbnails** — thumbnail preview while scrubbing
+- **Playback speed default / reset shortcut** — no per-user default or quick reset
+
+**Content discovery & social (read-only, questionable on TV):**
+- **Creator discovery** (`/api/v3/creator/discover`) — browse unsubscribed creators
+- **Tags** (`/api/v3/content/tags`) — tag-based browsing
+- **Comments (read-only)** — view comments thread
+- **Live chat (read-only)** — chat during livestreams
+- **Polls (read-only voting)** — participate in live polls
+
+**Nice-to-have:**
+- **Chromecast support**
+- **"Up Next" autoplay overlay** — countdown to next video
+- **New-content badges** — mark rows with unseen videos
+- **True black OLED theme**
 
 ### Architecture
 - **MVVM/MVI:** Current architecture is mixed; formalize with ViewModels
 - **Repository pattern:** Separate data layer from UI
 - **Dependency Injection:** Hilt/Koin adoption
 - **Navigation Component:** Replace manual intent navigation
+
+### Out of scope (unofficial TV client)
+- ❌ Subscription purchase / cancel / change plan
+- ❌ Payment methods / invoices / billing
+- ❌ Account settings (email, password, 2FA, avatar, deletion)
+- ❌ Support tickets
+- ❌ Creator tools (upload, analytics, moderation)
+- ❌ Push notifications (requires backend infra)
 
 ## Completed ✓
 
