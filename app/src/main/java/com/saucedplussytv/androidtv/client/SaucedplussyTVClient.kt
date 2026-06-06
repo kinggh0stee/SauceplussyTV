@@ -3,7 +3,7 @@ package com.saucedplussytv.androidtv.client
 import android.annotation.SuppressLint
 import android.content.Context
 import com.android.volley.VolleyError
-import com.google.common.reflect.TypeToken
+import com.google.gson.reflect.TypeToken
 import com.google.gson.Gson
 import com.saucedplussytv.androidtv.BuildConfig
 import com.saucedplussytv.androidtv.Constants

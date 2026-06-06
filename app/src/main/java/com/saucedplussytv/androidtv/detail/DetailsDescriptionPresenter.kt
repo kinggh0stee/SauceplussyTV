@@ -23,7 +23,6 @@ class DetailsDescriptionPresenter : AbstractDetailsDescriptionPresenter() {
         val p = PrettyTime()
         val elapsed = p.format(date)
         viewHolder.title.text = vid.title
-        //viewHolder.getSubtitle().setText(vid.getReleaseDate());
         viewHolder.subtitle.text = elapsed
         viewHolder.body.text = vid.description.parseAsHtml()
     }

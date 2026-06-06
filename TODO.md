@@ -71,9 +71,9 @@
 
 - [x] Gradle 8.13 → 9.4.1
 - [x] Android Gradle Plugin 8.13.1 → 9.2.1
-- [x] Kotlin 1.6.21 → 2.1.10
+- [x] Kotlin 1.6.21 → 2.4.0
 - [x] ExoPlayer 2.17.1 → 2.19.1
-- [x] ExoPlayer 2.x → Media3 1.4.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session)
+- [x] ExoPlayer 2.x → Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session)
 - [x] Auth rewrite: Keycloak OIDC → WebView cookie-session
 - [x] API host: floatplane.com → sauceplus.com
 - [x] App rebrand: Hydravion → SaucedplussyTV
