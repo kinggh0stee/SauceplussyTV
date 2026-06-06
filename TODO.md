@@ -4,7 +4,7 @@
 
 ### Dependency Updates
 - ~~**AndroidX Leanback:** done (1.2.0)~~
-- **`core-ktx`:** blocked at 1.18.0 — 1.19.0 requires compileSdk 37 (Android 37 SDK not yet installed)
+- ~~**`core-ktx`:** done (1.19.0, compileSdk 37)~~
 - ~~**Glide:** done (5.0.7)~~
 - ~~**Gson:** done (2.14.0)~~
 - ~~**ZXing:** removed (QR features unused since Keycloak rewrite)~~
@@ -12,7 +12,7 @@
 - ~~**Volley:** done (1.2.1, no upstream release since 2021)~~
 
 ### Build & Tooling
-- ~~**CompileSdk:** done (36)~~
+- ~~**CompileSdk:** done (37)~~
 - **Add unit tests:** Currently none exist
 - ~~**CI/CD:** GitHub Actions for automated builds~~
 

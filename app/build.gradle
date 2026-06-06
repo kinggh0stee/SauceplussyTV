@@ -1,7 +1,13 @@
 apply plugin: 'com.android.application'
 
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    compileSdk 36
+    compileSdk 37
 
     defaultConfig {
         applicationId "com.saucedplussytv.androidtv"
@@ -22,9 +28,22 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        release {
+            def sf = keystoreProperties['storeFile'] ?: System.getenv('STORE_FILE')
+            storeFile     sf ? file(sf) : null
+            storePassword keystoreProperties['storePassword'] ?: System.getenv('STORE_PASSWORD')
+            keyAlias      keystoreProperties['keyAlias']      ?: System.getenv('KEY_ALIAS')
+            keyPassword   keystoreProperties['keyPassword']   ?: System.getenv('KEY_PASSWORD')
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             buildConfigField("String","VERSION_NAME","\"${defaultConfig.versionName}\"")
+            // R8 disabled for v1.0.0: Gson DTOs and socket.io need keep rules before enabling.
+            // See proguard-rules.pro for the required rules — enable minifyEnabled true once validated.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -54,7 +73,7 @@ dependencies {
 
     // AndroidX
     implementation 'androidx.leanback:leanback:1.2.0'
-    implementation 'androidx.core:core-ktx:1.18.0'
+    implementation 'androidx.core:core-ktx:1.19.0'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'androidx.annotation:annotation:1.10.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'

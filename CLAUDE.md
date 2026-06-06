@@ -74,7 +74,7 @@ SocketClient.getInstance(context, mainPrefs)
 - **Platform:** Android TV, AndroidX Leanback (D-pad only, no touch). `minSdk 26`, `target/compileSdk 34`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1, Kotlin 2.0.21.
 - **Languages:** mixed Kotlin + Java — match the surrounding file's language.
 - **Playback:** ExoPlayer `2.19.1` (+ mediasession extension). **TODO:** Migrate to Media3.
-- **Networking:** Volley + OkHttp 5 (alpha) + `socket.io-client 1.0.1`; Gson for JSON.
+- **Networking:** Volley + OkHttp 5 + `socket.io-client 2.1.2`; Gson for JSON.
 - **UI/misc:** Glide (images), PrettyTime, NanoHTTPD (local server), versioncompare.
 - **ZXing** dependency is present but currently unused — QR features were removed with the Keycloak auth rewrite.
 
