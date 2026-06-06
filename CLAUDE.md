@@ -107,16 +107,11 @@ Sub-agents are defined in `.claude/agents/` with explicit model assignments:
 
 ### Mandatory workflow
 
-1. **Plan** (non-trivial changes): invoke `plan` agent (Opus) to produce a scoped implementation plan before writing code.
-2. **Implement**: route to the matching specialist agent, or inline for small changes.
-3. **Build**: `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug`.
-4. **Review**: every code change must pass `senior-reviewer` before it is done. No exceptions.
-5. `senior-reviewer` delegates to a **skeptical Kimi K2.6 instance** via the opencode MCP server (`opencode_ask` → `agent: "reviewer"`, model `kimi-for-coding/k2p6`, defined in `.opencode/agent/reviewer.md`).
-6. Reviewer returns **LGTM** or **BLOCKER / MAJOR / MINOR** issues. Fix all BLOCKERs and MAJORs and resubmit (same Kimi session for context).
-
-If the opencode MCP server is unavailable, the change is **not approved** — surface the failure rather than skipping review.
-
-Quick check: `opencode run --agent reviewer 'ping'` should respond without "agent not found".
+1. Route work to the matching specialist agent (or inline for small changes).
+2. Build: `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug`.
+3. **Every code change must pass `senior-reviewer` before it is done. No exceptions.**
+4. `senior-reviewer` is a **Claude Opus 4.8** agent defined in `.claude/agents/senior-reviewer.md`. Invoke it via the Agent tool with `subagent_type: "senior-reviewer"`.
+5. Reviewer returns **LGTM** or **BLOCKER / MAJOR / MINOR** issues. Fix all BLOCKERs and MAJORs and resubmit.
 
 ## Conventions
 
