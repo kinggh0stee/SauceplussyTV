@@ -30,22 +30,30 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
     override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
         (item as? ListRow)?.headerItem?.name?.let { name ->
             viewHolder.view?.let { subView ->
-                if (name == subView.context.getString(R.string.settings)) {
-                    subView.findViewById<ImageView>(R.id.header_icon).setImageResource(R.drawable.ic_settings)
-                    subView.findViewById<TextView>(R.id.header_sub).text = name
-                } else {
-                    subView.findViewById<TextView>(R.id.header_sub).text = name
-                    client?.getCreatorByName(name) { creator ->
-                        Glide.with(subView)
-                            .load(
-                                GlideUrl(
-                                    creator.icon?.path, LazyHeaders.Builder()
-                                        .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
-                                        .build()
-                                )
-                            )
-                            .apply(RequestOptions.circleCropTransform())
-                            .into(subView.findViewById(R.id.header_icon))
+                subView.findViewById<TextView>(R.id.header_sub).text = name
+                when {
+                    name == subView.context.getString(R.string.settings) -> {
+                        subView.findViewById<ImageView>(R.id.header_icon).setImageResource(R.drawable.ic_settings)
+                    }
+                    name == subView.context.getString(R.string.browse) -> {
+                        subView.findViewById<ImageView>(R.id.header_icon).setImageDrawable(null)
+                    }
+                    else -> {
+                        client?.getCreatorByName(name) { creator ->
+                            val logoPath = creator.icon?.path
+                            if (!logoPath.isNullOrEmpty()) {
+                                Glide.with(subView)
+                                    .load(
+                                        GlideUrl(
+                                            logoPath, LazyHeaders.Builder()
+                                                .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
+                                                .build()
+                                        )
+                                    )
+                                    .apply(RequestOptions.circleCropTransform())
+                                    .into(subView.findViewById(R.id.header_icon))
+                            }
+                        }
                     }
                 }
             }

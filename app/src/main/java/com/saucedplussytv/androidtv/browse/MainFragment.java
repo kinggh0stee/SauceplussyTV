@@ -527,14 +527,7 @@ public class MainFragment extends BrowseSupportFragment {
         }
 
         if (isPagination) {
-            // For pagination, append videos immediately for this creator without waiting for others
             appendVideosToRows(creatorGUID, previousSize);
-            // Still track subCount for coordination, but don't block on it
-            if (subCount > 1) {
-                subCount--;
-            } else {
-                subCount = subscriptions.size();
-            }
         } else {
             // Initial load - wait for all subscriptions to finish, then do full refresh
             if (subCount > 1) {
@@ -542,7 +535,6 @@ public class MainFragment extends BrowseSupportFragment {
             } else {
                 refreshVideoProgress();
                 subCount = subscriptions.size();
-                // Position is restored inside refreshRows() after setAdapter + startHeadersTransition
             }
         }
     }
@@ -575,76 +567,25 @@ public class MainFragment extends BrowseSupportFragment {
             return;
         }
         
-        List<Subscription> subs = subscriptions;
         ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
         CardPresenter cardPresenter = new CardPresenter(videoProgress);
 
-        int i;
-        for (i = 0; i < subs.size(); i++) {
-            ArrayObjectAdapter listRowAdapter = new ArrayObjectAdapter(cardPresenter);
-
-            Subscription sub = subscriptions.get(i);
-            List<Video> vids = videos.get(sub.getCreator());
-
-            boolean isStreaming = sub.getStreaming() != null ? sub.getStreaming() : false;
-
-            // Stream node
-            if (sub.getStreamUrl() != null) {
-                int row = getRow(sub.getCreator(), subscriptions);
-                Video stream = new Video();
-                stream.setType("live");
-                FloatplaneLiveStream live = sub.getStreamInfo();
-                if (live != null) {
-                    Creator creator = new Creator();
-                    creator.setId((sub.getCreator() == null) ? "" : sub.getCreator());
-
-                    stream.setCreator(creator);
-                    stream.setDescription(live.getDescription());
-                    stream.setTitle("LIVE: " + live.getTitle());
-                    stream.setVidUrl(sub.getStreamUrl());
-                    if (live.getThumbnail() != null) {
-                        Thumbnail thumbnail = new Thumbnail();
-                        ChildImage ci = new ChildImage();
-                        ci.setPath(live.getThumbnail().getPath());
-                        ci.setWidth(live.getThumbnail().getWidth());
-                        ci.setHeight(live.getThumbnail().getHeight());
-                        List<ChildImage> cis = new ArrayList<>();
-                        thumbnail.setChildImages(cis);
-                        thumbnail.setPath(live.getThumbnail().getPath());
-                        thumbnail.setHeight(live.getThumbnail().getHeight());
-                        thumbnail.setWidth(live.getThumbnail().getWidth());
-                        stream.setThumbnail(thumbnail);
-                    }
-                    strms.put(row, stream);
-                    //streams.add(row, stream);
-
-                    // stream card is prepended to the local rowVids snapshot below; don't mutate vids here
-                }
-            }
-
-            if (vids != null) {
-                // Build a local list so the shared videos map is never mutated here;
-                // mutating vids directly would prepend the stream card again on every refresh.
-                List<Video> rowVids = new ArrayList<>(vids);
-                if (isStreaming && sub.getStreamUrl() != null && sub.getStreamInfo() != null) {
-                    Video live = strms.get(getRow(sub.getCreator(), subscriptions));
-                    if (live != null) rowVids.add(0, live);
-                }
-                rowVids.forEach(listRowAdapter::add);
-            }
-
-            String creatorTitle = client.getCreatorTitle(sub.getCreator() != null ? sub.getCreator() : "");
-            String headerTitle = (!creatorTitle.isEmpty()) ? creatorTitle
-                    : (sub.getPlan() != null && sub.getPlan().getTitle() != null) ? sub.getPlan().getTitle() : "";
-            HeaderItem header = new HeaderItem(i, headerTitle);
-            rowsAdapter.add(new ListRow(header, listRowAdapter));
+        // Browse row: merge all fetched videos, sort by releaseDate descending, take first 20.
+        // releaseDate is ISO-8601 so lexicographic comparison is equivalent to chronological.
+        List<Video> allVideos = new ArrayList<>();
+        for (List<Video> vids : videos.values()) {
+            if (vids != null) allVideos.addAll(vids);
         }
+        allVideos.sort((a, b) -> {
+            String da = a.getReleaseDate() != null ? a.getReleaseDate() : "";
+            String db = b.getReleaseDate() != null ? b.getReleaseDate() : "";
+            return db.compareTo(da);
+        });
+        ArrayObjectAdapter browseAdapter = new ArrayObjectAdapter(cardPresenter);
+        allVideos.subList(0, Math.min(20, allVideos.size())).forEach(browseAdapter::add);
+        rowsAdapter.add(new ListRow(new HeaderItem(0, getString(R.string.browse)), browseAdapter));
 
-        if (!strms.isEmpty()) {
-            //setupLiveCheck();
-        }
-
-        HeaderItem gridHeader = new HeaderItem(i, getString(R.string.settings));
+        HeaderItem gridHeader = new HeaderItem(1, getString(R.string.settings));
 
         GridItemPresenter mGridPresenter = new GridItemPresenter();
         ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
@@ -670,16 +611,8 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void addLiveToRow(Integer row, Video stream, List<Subscription> subs) {
-        ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
-        if (rows == null) return;
-        for (int i = 0; i < subs.size(); i++) {
-            if (i == row) {
-                ListRow lr = (ListRow) rows.get(i);
-                ArrayObjectAdapter vids = (ArrayObjectAdapter) lr.getAdapter();
-                vids.add(0, stream);
-                vids.notifyArrayItemRangeChanged(0, vids.size());
-            }
-        }
+        // Browse-only layout: all content goes into row 0 (Browse).
+        addToBrowseRow(stream);
     }
 
     private void setupLiveCheck() {
@@ -717,89 +650,50 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void appendVideosToRows(String creatorGUID, int previousSize) {
-        // Guard against appending if we're logged out
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring video append - user is logged out");
-            return;
-        }
-        
+        if (!isLoggedIn) return;
         ArrayObjectAdapter rowsAdapter = (ArrayObjectAdapter) getAdapter();
-        if (rowsAdapter == null) {
-            dLog(TAG, "Adapter not initialized, falling back to full refresh");
+        if (rowsAdapter == null || rowsAdapter.size() == 0) {
             refreshVideoProgress();
             return;
         }
-        
-        int rowIndex = getRow(creatorGUID, subscriptions);
-        if (rowIndex == -1 || rowIndex >= rowsAdapter.size()) {
-            dLog(TAG, "Invalid row index for creator: " + creatorGUID);
-            return;
+        // Browse row is always at index 0. Rebuild its content from the full merged+sorted pool.
+        ListRow browseRow = (ListRow) rowsAdapter.get(0);
+        if (browseRow == null) return;
+        ArrayObjectAdapter browseAdapter = (ArrayObjectAdapter) browseRow.getAdapter();
+        if (browseAdapter == null) return;
+
+        List<Video> allVideos = new ArrayList<>();
+        for (List<Video> vids : videos.values()) {
+            if (vids != null) allVideos.addAll(vids);
         }
-        
-        ListRow listRow = (ListRow) rowsAdapter.get(rowIndex);
-        if (listRow == null) {
-            dLog(TAG, "ListRow is null for row index: " + rowIndex);
-            return;
-        }
-        
-        ArrayObjectAdapter listRowAdapter = (ArrayObjectAdapter) listRow.getAdapter();
-        if (listRowAdapter == null) {
-            dLog(TAG, "ListRow adapter is null for row index: " + rowIndex);
-            return;
-        }
-        
-        List<Video> vids = videos.get(creatorGUID);
-        if (vids == null || vids.size() <= previousSize) {
-            dLog(TAG, "No new videos to append for creator: " + creatorGUID);
-            return;
-        }
-        
-        // Get new videos that were added
-        List<Video> newVideos = vids.subList(previousSize, vids.size());
-        
-        // Store the insertion position before adding items
-        int insertPosition = listRowAdapter.size();
-        
-        // Add new videos to the adapter (add() automatically notifies, but we'll be explicit for the range)
-        for (Video video : newVideos) {
-            listRowAdapter.add(video);
-        }
-        
-        // Notify adapter of the new items for smooth insertion without full refresh
-        // Using notifyArrayItemRangeChanged to match existing code pattern
-        listRowAdapter.notifyArrayItemRangeChanged(insertPosition, newVideos.size());
-        
-        // Selection position should be automatically preserved since we're not calling setAdapter()
-        dLog(TAG, "Appended " + newVideos.size() + " videos to row " + rowIndex + " starting at position " + insertPosition);
+        allVideos.sort((a, b) -> {
+            String da = a.getReleaseDate() != null ? a.getReleaseDate() : "";
+            String db = b.getReleaseDate() != null ? b.getReleaseDate() : "";
+            return db.compareTo(da);
+        });
+        List<Video> topVideos = allVideos.subList(0, Math.min(20, allVideos.size()));
+        browseAdapter.clear();
+        topVideos.forEach(browseAdapter::add);
     }
 
     private void addToRow(Video video, List<Subscription> subs) {
+        // Browse-only layout: all content goes into row 0 (Browse).
         dLog("addToRow", video.getGuid());
+        addToBrowseRow(video);
+    }
+
+    private void addToBrowseRow(Video video) {
         ArrayObjectAdapter rows = (ArrayObjectAdapter) getAdapter();
-        if (rows == null) return;
-        for (int i = 0; i < subs.size(); i++) {
-            String creator = subs.get(i).getCreator();
-            String vid = video.getCreator().getId();
-            if (creator == null) continue;
-            if (creator.equalsIgnoreCase(vid)) {
-                dLog("addToRow", "Adding video to row " + i + ", creator " + creator);
-                ListRow lr = (ListRow) rows.get(i);
-                ArrayObjectAdapter vids = (ArrayObjectAdapter) lr.getAdapter();
-                boolean addVid = true;
-                for (int z = 0; z < vids.size(); z++) {
-                    Video v = (Video) vids.get(z);
-                    if (v.getGuid().equalsIgnoreCase(video.getGuid())) {
-                        dLog("addToRow", "Video already found. Not adding.");
-                        addVid = false;
-                    }
-                }
-                if (addVid) {
-                    dLog("addToRow", "Adding video " + video.getGuid() + " to row " + i);
-                    vids.add(0, video);
-                    vids.notifyArrayItemRangeChanged(0, vids.size());
-                }
-            }
+        if (rows == null || rows.size() == 0) return;
+        ListRow browseRow = (ListRow) rows.get(0);
+        if (browseRow == null) return;
+        ArrayObjectAdapter vids = (ArrayObjectAdapter) browseRow.getAdapter();
+        if (vids == null) return;
+        for (int z = 0; z < vids.size(); z++) {
+            if (((Video) vids.get(z)).getGuid().equalsIgnoreCase(video.getGuid())) return;
         }
+        vids.add(0, video);
+        vids.notifyArrayItemRangeChanged(0, vids.size());
     }
 
     private int getRow(Video video, List<Subscription> subs) {
@@ -959,6 +853,8 @@ public class MainFragment extends BrowseSupportFragment {
                 videos.clear();
                 creatorPages.clear();
                 adapterInitialized = false;
+                rowSelected = 0;
+                colSelected = 0;
                 refreshSubscriptions();
                 break;
             case LOGOUT:

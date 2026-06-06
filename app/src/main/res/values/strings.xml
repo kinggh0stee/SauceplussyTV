@@ -2,6 +2,7 @@
     <string name="app_name">SaucedplussyTV</string>
     <string name="browse_title">SaucedplussyTV</string>
     <string name="play">Play</string>
+    <string name="browse">Browse</string>
     <string name="settings">Settings</string>
     <string name="personal_settings">Personal Settings</string>
     <string name="app_info">About</string>

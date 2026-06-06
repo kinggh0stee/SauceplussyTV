@@ -45,24 +45,7 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                 }
 
                 gson.fromJson(response, Array<Subscription>::class.java).let { subs ->
-                    // Wait for all creator-info fetches before handing subs to the UI so row
-                    // headers can read creator titles from the cache when buildRows runs.
-                    val withCreator = subs.filter { !it.creator.isNullOrEmpty() }
-                    if (withCreator.isEmpty()) {
-                        callback(subs)
-                        return@let
-                    }
-                    var pending = withCreator.size
-                    subs.forEach { sub ->
-                        if (!sub.creator.isNullOrEmpty()) {
-                            // getCreatorById uses the cache on repeat calls, avoiding duplicate
-                            // requests when getSubs is called multiple times (e.g. on refresh).
-                            getCreatorById(sub.creator!!) { creator ->
-                                sub.streamInfo = creator.lastLiveStream
-                                if (--pending == 0) callback(subs)
-                            }
-                        }
-                    }
+                    callback(subs)
                 }
             }
 
