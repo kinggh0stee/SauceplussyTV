@@ -280,7 +280,7 @@ public class MainFragment extends BrowseSupportFragment {
                 if (row != -1 && strms.containsKey(row)) {
                     android.app.Activity activity = getActivity();
                     if (activity != null) {
-                        activity.runOnUiThread(() -> addToRow(strms.get(row), subscriptions));
+                        activity.runOnUiThread(() -> addToRow(strms.get(row)));
                     }
                 }
             } else if (eventType.equalsIgnoreCase("CONTENT_POST_RELEASE")) {
@@ -292,7 +292,7 @@ public class MainFragment extends BrowseSupportFragment {
                     if (row != -1) {
                         android.app.Activity activity = getActivity();
                         if (activity != null) {
-                            activity.runOnUiThread(() -> addToRow(video, subscriptions));
+                            activity.runOnUiThread(() -> addToRow(video));
                         }
                     }
                     return Unit.INSTANCE;
@@ -527,7 +527,7 @@ public class MainFragment extends BrowseSupportFragment {
         }
 
         if (isPagination) {
-            appendVideosToRows(creatorGUID, previousSize);
+            appendVideosToRows();
         } else {
             // Initial load - wait for all subscriptions to finish, then do full refresh
             if (subCount > 1) {
@@ -610,7 +610,7 @@ public class MainFragment extends BrowseSupportFragment {
         }
     }
 
-    private void addLiveToRow(Integer row, Video stream, List<Subscription> subs) {
+    private void addLiveToRow(Video stream) {
         // Browse-only layout: all content goes into row 0 (Browse).
         addToBrowseRow(stream);
     }
@@ -628,7 +628,7 @@ public class MainFragment extends BrowseSupportFragment {
                 if (stream != null) {
                     client.checkLive(stream.getVidUrl(), status -> {
                         if (status == 200) {
-                            addLiveToRow(liveIndex, stream, subscriptions);
+                            addLiveToRow(stream);
                             liveHandler.removeCallbacks(this);
                         } else {
                             liveHandler.postDelayed(this, 10000);
@@ -649,7 +649,7 @@ public class MainFragment extends BrowseSupportFragment {
         liveHandler.post(runnable);
     }
 
-    private void appendVideosToRows(String creatorGUID, int previousSize) {
+    private void appendVideosToRows() {
         if (!isLoggedIn) return;
         ArrayObjectAdapter rowsAdapter = (ArrayObjectAdapter) getAdapter();
         if (rowsAdapter == null || rowsAdapter.size() == 0) {
@@ -676,7 +676,7 @@ public class MainFragment extends BrowseSupportFragment {
         topVideos.forEach(browseAdapter::add);
     }
 
-    private void addToRow(Video video, List<Subscription> subs) {
+    private void addToRow(Video video) {
         // Browse-only layout: all content goes into row 0 (Browse).
         dLog("addToRow", video.getGuid());
         addToBrowseRow(video);
