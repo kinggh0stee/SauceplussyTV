@@ -864,7 +864,7 @@ public class MainFragment extends BrowseSupportFragment {
                         "- bmlzootown\n" +
                         "- NickM-27\n" +
                         "- Jman012\n")
-                //.setPositiveButton("OKAY", null)
+                .setPositiveButton("OK", null)
                 .create()
                 .show();
     }

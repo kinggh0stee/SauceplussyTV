@@ -80,10 +80,12 @@ SocketClient.getInstance(context, mainPrefs)
 
 ## Rebrand status
 
-Code migration is complete. Remaining work requires designer/assets:
-- `res/drawable/banner.png`, `res/drawable/icon.png`, `res/drawable/ic_saucedplussytv.xml`
-- Launcher mipmaps in `res/mipmap-*`
-- `res/values/colors.xml` — brand colors
+Complete. All assets are in place:
+- `res/drawable/icon.xml` — vector "S+" TV logo (replaces deleted icon.png)
+- `res/drawable-xhdpi/banner.png` — Leanback launcher banner
+- `res/drawable/ic_saucedplussytv.xml` — settings icon
+- `res/mipmap-*/ic_launcher*.webp` — adaptive launcher icons (all densities)
+- `res/values/colors.xml` — brand colors (#F5B731 amber accent, #1A1A1A dark surface)
 
 ## Reference material
 
