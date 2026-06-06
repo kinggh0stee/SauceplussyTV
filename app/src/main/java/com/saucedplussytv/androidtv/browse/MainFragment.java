@@ -494,7 +494,7 @@ public class MainFragment extends BrowseSupportFragment {
         
         List<Subscription> trimmed = new ArrayList<>();
         for (Subscription sub : subs) {
-            if (trimmed.size() > 0) {
+            if (!trimmed.isEmpty()) {
                 if (!containsSub(trimmed, sub)) {
                     trimmed.add(sub);
                 }
@@ -541,12 +541,13 @@ public class MainFragment extends BrowseSupportFragment {
             return;
         }
 
-        boolean isPagination = adapterInitialized && videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0;
-
         if (vids == null) return;
 
-        if (videos.get(creatorGUID) != null && videos.get(creatorGUID).size() > 0) {
-            videos.get(creatorGUID).addAll(Arrays.asList(vids));
+        List<Video> existing = videos.get(creatorGUID);
+        boolean isPagination = adapterInitialized && existing != null && !existing.isEmpty();
+
+        if (existing != null && !existing.isEmpty()) {
+            existing.addAll(Arrays.asList(vids));
         } else {
             videos.put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
         }
@@ -589,11 +590,7 @@ public class MainFragment extends BrowseSupportFragment {
         for (List<Video> vids : videos.values()) {
             if (vids != null) all.addAll(vids);
         }
-        all.sort((a, b) -> {
-            String da = a.getReleaseDate() != null ? a.getReleaseDate() : "";
-            String db = b.getReleaseDate() != null ? b.getReleaseDate() : "";
-            return db.compareTo(da);
-        });
+        all.sort((a, b) -> b.getReleaseDate().compareTo(a.getReleaseDate()));
         return all;
     }
 
@@ -654,13 +651,8 @@ public class MainFragment extends BrowseSupportFragment {
                         } else {
                             liveHandler.postDelayed(this, 10000);
                         }
-                        try {
-                            liveIndex = strms.higherKey(liveIndex);
-                        } catch (NullPointerException e) {
-                            if (liveIndex == strms.lastKey()) {
-                                liveIndex = strms.firstKey();
-                            }
-                        }
+                        Integer next = strms.higherKey(liveIndex);
+                        liveIndex = (next != null) ? next : strms.firstKey();
 
                         return Unit.INSTANCE;
                     });
@@ -911,12 +903,12 @@ public class MainFragment extends BrowseSupportFragment {
         }
         int y = requireContext().getResources().getDisplayMetrics().heightPixels;
         AtomicBoolean found = new AtomicBoolean(false);
-        String res = "";
         info.getLevels().forEach(level -> {
             if (level.getName().equalsIgnoreCase(Integer.toString(y))) {
                 found.set(true);
             }
         });
+        String res;
         if (found.get()) {
             res = Integer.toString(y);
         } else {
