@@ -79,14 +79,19 @@ class WebLoginActivity : ComponentActivity() {
             // Force GPU compositing — reduces CPU load during Cloudflare Turnstile JS execution.
             setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
             settings.apply {
+                // Required: Cloudflare Turnstile is pure JS; without this the challenge
+                // never renders and login is impossible.
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 cacheMode = WebSettings.LOAD_DEFAULT
                 useWideViewPort = true
                 loadWithOverviewMode = true
-                // Zoom controls are not useful on a TV remote and add touch-interception
-                // overhead that can slow key-event delivery to the page.
                 setSupportZoom(false)
+                // Explicit hardening — the login page is always https://www.sauceplus.com.
+                // File, content-provider, and mixed-content access are never needed.
+                allowFileAccess = false
+                allowContentAccess = false
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             }
         }
 
