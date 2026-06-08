@@ -22,6 +22,7 @@ import org.json.JSONObject
 class SaucedplussyTVClient private constructor(private val context: Context) {
 
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
+    private val creatorFetchInFlight: MutableSet<String> = hashSetOf()
     private val requestTask: RequestTask = RequestTask(context)
     private val authManager: AuthManager = AuthManager.getInstance(context)
     private val gson = Gson()
@@ -340,9 +341,15 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
 
     private fun cacheLogo(creatorGUID: String, callback: ((Creator) -> Unit)?) {
         if (creatorCache[creatorGUID] != null) {
-            // If the logo already is cached, no reason to retrieve it again
             return
         }
+        // Deduplicate concurrent requests for the same GUID — all callbacks are on the main
+        // thread so a plain HashSet is sufficient. Without this guard a recycled header re-binding
+        // while the 30s creator/info response is still in flight would launch a duplicate request.
+        if (creatorFetchInFlight.contains(creatorGUID)) {
+            return
+        }
+        creatorFetchInFlight.add(creatorGUID)
 
         authManager.withValidAccessToken({ token ->
             requestTask.sendRequest(
@@ -351,6 +358,7 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                 object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
+                    creatorFetchInFlight.remove(creatorGUID)
                     try {
                         val creator = parseCreator(response)
                         if (creator != null) {
@@ -370,10 +378,12 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                 override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
 
                 override fun onError(error: VolleyError) {
+                    creatorFetchInFlight.remove(creatorGUID)
                     callback?.invoke(Creator())
                 }
             })
         }, {
+            creatorFetchInFlight.remove(creatorGUID)
             callback?.invoke(Creator())
         })
     }

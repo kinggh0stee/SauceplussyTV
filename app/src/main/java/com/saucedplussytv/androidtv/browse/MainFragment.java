@@ -534,21 +534,6 @@ public class MainFragment extends BrowseSupportFragment {
         }
         subCount = pending;
         dLog("ROWS", trimmed.size() + "");
-
-        // Fire getCreatorById in the background to warm the icon cache used by
-        // SubscriptionHeaderPresenter. Creator names come from video payloads instead
-        // (avoiding a separate round-trip per creator before rows can appear).
-        for (Subscription sub : subscriptions) {
-            final String creatorGUID = sub.getCreator();
-            if (creatorGUID != null) {
-                client.getCreatorById(creatorGUID, creator -> {
-                    if (creator.getName().isEmpty()) {
-                        dLog(TAG, "Icon warmup: empty creator for " + creatorGUID);
-                    }
-                    return Unit.INSTANCE;
-                });
-            }
-        }
     }
 
     private boolean containsSub(List<Subscription> trimmed, Subscription sub) {
