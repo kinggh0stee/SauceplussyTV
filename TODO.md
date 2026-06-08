@@ -69,6 +69,13 @@
 
 ## Completed ✓
 
+- [x] Per-subscription sidebar rows — each creator appears as a named ListRow with icon in the Leanback header panel; Browse grid and Settings always bookend the list
+- [x] Fast incremental row rendering — rows appear on first video response (~2s), remaining creators slot in dynamically via `addOrUpdateSubRow()`
+- [x] GUID-keyed creator icon lookup in `SubscriptionHeaderPresenter` — eliminates name-collision and handles async cache fills
+- [x] Browse PageRow header now visible — widened cast from `ListRow` to `Row` in `SubscriptionHeaderPresenter`
+- [x] `mergeSortAllVideos()` null-safe for empty `releaseDate` fields
+- [x] `BrowseGridFragment` crash fix — added `MainFragmentAdapterProvider` interface
+- [x] WebView security hardening — `allowFileAccess=false`, `allowContentAccess=false`, `MIXED_CONTENT_NEVER_ALLOW`
 - [x] Gradle 8.13 → 9.4.1
 - [x] Android Gradle Plugin 8.13.1 → 9.2.1
 - [x] Kotlin 1.6.21 → 2.4.0

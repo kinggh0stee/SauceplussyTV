@@ -69,13 +69,15 @@ SocketClient.getInstance(context)
 
 **Logged-out state:** Do not update the UI when `!authManager.isLoggedIn()`. Reset the UI-init flag on logout.
 
+**Sidebar row layout:** `MainFragment` manages a `rowsAdapter` (ArrayObjectAdapter) with three tiers: (0) Browse `PageRow` → `BrowseGridFragment` 4-col grid; (1..N) per-creator `ListRow`s; (N+1) Settings `ListRow`. Creator rows use `CreatorHeaderItem` (carries `creatorGUID`) instead of plain `HeaderItem`. The `settingsRowIndex` field tracks the Settings row's position so `addOrUpdateSubRow()` can insert before it safely. Creator names are extracted from `vids[0].getCreator().getTitle()` in `gotVideos()` — no separate `getCreatorById` round-trip is needed for row creation. `getCreatorById` is fired as background warmup in `gotSubscriptions()` to populate `creatorCache` for icon loading. `SubscriptionHeaderPresenter.onBindViewHolder()` uses GUID-based `getCreatorById` (not name-based `getCreatorByName`) to resolve icons, handling both synchronous cache hits and asynchronous cache misses.
+
 ## Tech stack
 
 - **Platform:** Android TV, AndroidX Leanback (D-pad only, no touch). `minSdk 26`, `targetSdk 35`, `compileSdk 37`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1, Kotlin 2.4.0.
 - **Languages:** mixed Kotlin + Java — match the surrounding file's language.
 - **Playback:** AndroidX Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session, media3-datasource-okhttp).
 - **Networking:** Volley + OkHttp 5 + `socket.io-client 2.1.2`; Gson for JSON.
-- **UI/misc:** Glide (images), PrettyTime, NanoHTTPD (local server), versioncompare.
+- **UI/misc:** Glide (images), PrettyTime, versioncompare.
 - **ZXing** dependency is present but currently unused — QR features were removed with the Keycloak auth rewrite.
 
 ## Rebrand status

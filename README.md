@@ -19,7 +19,8 @@ While it shares lineage with Hydravion, SaucedplussyTV is a distinct project wit
 
 ## Features
 
-- Browse subscriptions and video content
+- Per-creator sidebar rows — each subscription appears as a named row with creator icon
+- Browse row — all subscriptions merged and sorted by release date
 - HLS playback with quality adaptation via Media3/ExoPlayer
 - Livestream support with real-time notifications
 - Subtitle / CC track selection
