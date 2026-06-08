@@ -41,7 +41,8 @@
             android:banner="@drawable/banner"
             android:exported="true"
             android:icon="@drawable/icon"
-            android:logo="@drawable/banner">
+            android:logo="@drawable/banner"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -51,10 +52,12 @@
 
         <activity
             android:name=".detail.DetailsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
         <activity
             android:name=".playback.PlaybackActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
         <activity
             android:name=".authenticate.WebLoginActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
