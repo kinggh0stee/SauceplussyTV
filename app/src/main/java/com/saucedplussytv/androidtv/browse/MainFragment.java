@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import com.saucedplussytv.androidtv.card.CardPresenter;
 
 import io.github.g00fy2.versioncompare.Version;
 import io.socket.client.Ack;
@@ -60,6 +61,7 @@ import com.saucedplussytv.androidtv.models.Video;
 import com.saucedplussytv.androidtv.models.VideoInfo;
 import com.saucedplussytv.androidtv.models.VideoProgress;
 import com.saucedplussytv.androidtv.playback.PlaybackActivity;
+import com.saucedplussytv.androidtv.subscription.CreatorHeaderItem;
 import com.saucedplussytv.androidtv.subscription.Subscription;
 import com.saucedplussytv.androidtv.post.VideoAttachments;
 import com.saucedplussytv.androidtv.subscription.SubscriptionHeaderPresenter;
@@ -99,6 +101,11 @@ public class MainFragment extends BrowseSupportFragment {
     private List<Video> pendingBrowseVideos;
     private boolean paginationInFlight = false;
     private final HashMap<String, Boolean> exhaustedCreators = new HashMap<>();
+    private final HashMap<String, String> creatorNames = new HashMap<>();
+    private final HashMap<String, ArrayObjectAdapter> subRowAdapters = new HashMap<>();
+    private ArrayObjectAdapter rowsAdapter;
+    private long nextRowId = 1;
+    private int settingsRowIndex = -1;
 
     private ActivityResultLauncher<Intent> loginLauncher;
     private ActivityResultLauncher<Intent> detailLauncher;
@@ -388,6 +395,11 @@ public class MainFragment extends BrowseSupportFragment {
         pendingBrowseVideos = null;
         paginationInFlight = false;
         exhaustedCreators.clear();
+        creatorNames.clear();
+        subRowAdapters.clear();
+        rowsAdapter = null;
+        nextRowId = 1;
+        settingsRowIndex = -1;
 
         // Reset UI initialization flag to allow proper setup on next login
         uiInitialized = false;
@@ -522,6 +534,21 @@ public class MainFragment extends BrowseSupportFragment {
         }
         subCount = pending;
         dLog("ROWS", trimmed.size() + "");
+
+        // Fire getCreatorById in the background to warm the icon cache used by
+        // SubscriptionHeaderPresenter. Creator names come from video payloads instead
+        // (avoiding a separate round-trip per creator before rows can appear).
+        for (Subscription sub : subscriptions) {
+            final String creatorGUID = sub.getCreator();
+            if (creatorGUID != null) {
+                client.getCreatorById(creatorGUID, creator -> {
+                    if (creator.getName().isEmpty()) {
+                        dLog(TAG, "Icon warmup: empty creator for " + creatorGUID);
+                    }
+                    return Unit.INSTANCE;
+                });
+            }
+        }
     }
 
     private boolean containsSub(List<Subscription> trimmed, Subscription sub) {
@@ -543,6 +570,13 @@ public class MainFragment extends BrowseSupportFragment {
 
         if (vids == null) return;
 
+        // Extract creator name from video payload (avoids a separate API call per creator).
+        if (vids.length > 0 && vids[0].getCreator() != null
+                && !creatorNames.containsKey(creatorGUID)) {
+            String name = vids[0].getCreator().getTitle();
+            if (!name.isEmpty()) creatorNames.put(creatorGUID, name);
+        }
+
         List<Video> existing = videos.get(creatorGUID);
         boolean isPagination = adapterInitialized && existing != null && !existing.isEmpty();
 
@@ -554,9 +588,21 @@ public class MainFragment extends BrowseSupportFragment {
 
         if (isPagination) {
             appendVideosToRows();
+            updateSubRow(creatorGUID);
         } else {
             subCount--;
-            refreshRows(); // render with whatever has arrived so far — don't wait for all subs
+            if (!adapterInitialized) {
+                initRows();
+            } else {
+                // Rows already built — update Browse grid, then add/update the creator row.
+                List<Video> allVideos = mergeSortAllVideos();
+                if (gridFragment != null) {
+                    gridFragment.replaceVideos(allVideos, videoProgress);
+                } else {
+                    pendingBrowseVideos = allVideos;
+                }
+                addOrUpdateSubRow(creatorGUID);
+            }
             if (subCount == 0) {
                 subCount = subscriptions.size();
                 fetchProgressAsync();
@@ -588,42 +634,89 @@ public class MainFragment extends BrowseSupportFragment {
         for (List<Video> vids : videos.values()) {
             if (vids != null) all.addAll(vids);
         }
-        all.sort((a, b) -> b.getReleaseDate().compareTo(a.getReleaseDate()));
+        all.sort((a, b) -> {
+            String da = a.getReleaseDate();
+            String db = b.getReleaseDate();
+            // Empty strings sort to the end (oldest). Lexicographic order is correct
+            // for the RFC 3339 UTC 'Z'-suffix timestamps the Sauce+ API returns.
+            if (da.isEmpty() && db.isEmpty()) return 0;
+            if (da.isEmpty()) return 1;
+            if (db.isEmpty()) return -1;
+            return db.compareTo(da);
+        });
         return all;
     }
 
-    private void refreshRows() {
-        if (!isAdded() || getActivity() == null) return;
-        if (!isLoggedIn) return;
-
+    private void initRows() {
+        if (!isAdded() || getActivity() == null || !isLoggedIn) return;
         List<Video> allVideos = mergeSortAllVideos();
+        nextRowId = 1;
 
-        if (!adapterInitialized) {
-            ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
-            rowsAdapter.add(new PageRow(new HeaderItem(0, getString(R.string.browse))));
+        rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
+        rowsAdapter.add(new PageRow(new HeaderItem(0, getString(R.string.browse))));
 
-            GridItemPresenter mGridPresenter = new GridItemPresenter();
-            ArrayObjectAdapter gridRowAdapter = new ArrayObjectAdapter(mGridPresenter);
-            gridRowAdapter.add(getResources().getString(R.string.refresh));
-            gridRowAdapter.add(getResources().getString(R.string.live_stream));
-            gridRowAdapter.add(getResources().getString(R.string.app_info));
-            gridRowAdapter.add(getResources().getString(R.string.logout));
-            rowsAdapter.add(new ListRow(new HeaderItem(1, getString(R.string.settings)), gridRowAdapter));
+        // Only create rows for creators whose names are already known.
+        // addOrUpdateSubRow() will insert the remaining rows as videos arrive.
+        for (Subscription sub : subscriptions) {
+            String creatorGUID = sub.getCreator();
+            if (creatorGUID == null) continue;
+            String name = creatorNames.get(creatorGUID);
+            if (name == null || name.isEmpty()) continue;
 
-            setAdapter(rowsAdapter);
-            adapterInitialized = true;
-            pendingBrowseVideos = allVideos;
-
-            liveHandler.post(() ->
-                setSelectedPosition(rowSelected, false, null)
-            );
-        } else {
-            if (gridFragment != null) {
-                gridFragment.replaceVideos(allVideos, videoProgress);
-            } else {
-                pendingBrowseVideos = allVideos;
+            ArrayObjectAdapter subAdapter = new ArrayObjectAdapter(new CardPresenter(new ArrayList<>()));
+            List<Video> subVideos = videos.get(creatorGUID);
+            if (subVideos != null) {
+                for (Video v : subVideos) subAdapter.add(v);
             }
+            subRowAdapters.put(creatorGUID, subAdapter);
+            rowsAdapter.add(new ListRow(new CreatorHeaderItem(nextRowId++, name, creatorGUID), subAdapter));
         }
+
+        // Track Settings row index before adding it so addOrUpdateSubRow() can insert before it safely.
+        settingsRowIndex = rowsAdapter.size();
+        GridItemPresenter mGridPresenter = new GridItemPresenter();
+        ArrayObjectAdapter settingsAdapter = new ArrayObjectAdapter(mGridPresenter);
+        settingsAdapter.add(getResources().getString(R.string.refresh));
+        settingsAdapter.add(getResources().getString(R.string.live_stream));
+        settingsAdapter.add(getResources().getString(R.string.app_info));
+        settingsAdapter.add(getResources().getString(R.string.logout));
+        rowsAdapter.add(new ListRow(new HeaderItem(nextRowId++, getString(R.string.settings)), settingsAdapter));
+
+        setAdapter(rowsAdapter);
+        adapterInitialized = true;
+        pendingBrowseVideos = allVideos;
+
+        liveHandler.post(() -> setSelectedPosition(rowSelected, false, null));
+    }
+
+    private void addOrUpdateSubRow(String creatorGUID) {
+        if (rowsAdapter == null) return;
+        ArrayObjectAdapter existing = subRowAdapters.get(creatorGUID);
+        if (existing != null) {
+            // Row already created — just refresh its content.
+            updateSubRow(creatorGUID);
+            return;
+        }
+        String name = creatorNames.get(creatorGUID);
+        if (name == null || name.isEmpty()) return; // Name not yet available
+        ArrayObjectAdapter subAdapter = new ArrayObjectAdapter(new CardPresenter(new ArrayList<>()));
+        List<Video> subVideos = videos.get(creatorGUID);
+        if (subVideos != null) for (Video v : subVideos) subAdapter.add(v);
+        subRowAdapters.put(creatorGUID, subAdapter);
+        // Insert before Settings. settingsRowIndex tracks the exact position — don't rely
+        // on size()-1 since that assumption breaks if Browse (row 0) is the only other row.
+        int insertIdx = (settingsRowIndex >= 1) ? settingsRowIndex : Math.max(1, rowsAdapter.size() - 1);
+        rowsAdapter.add(insertIdx, new ListRow(new CreatorHeaderItem(nextRowId++, name, creatorGUID), subAdapter));
+        settingsRowIndex++;
+    }
+
+    private void updateSubRow(String creatorGUID) {
+        ArrayObjectAdapter adapter = subRowAdapters.get(creatorGUID);
+        if (adapter == null) return;
+        List<Video> subVideos = videos.get(creatorGUID);
+        if (subVideos == null) return;
+        adapter.clear();
+        for (Video v : subVideos) adapter.add(v);
     }
 
     private void addLiveToRow(Video stream) {
@@ -832,6 +925,11 @@ public class MainFragment extends BrowseSupportFragment {
                 videos.clear();
                 creatorPages.clear();
                 exhaustedCreators.clear();
+                creatorNames.clear();
+                subRowAdapters.clear();
+                rowsAdapter = null;
+                nextRowId = 1;
+                settingsRowIndex = -1;
                 adapterInitialized = false;
                 gridFragment = null;
                 pendingBrowseVideos = null;

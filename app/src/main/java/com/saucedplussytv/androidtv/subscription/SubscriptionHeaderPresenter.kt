@@ -4,8 +4,8 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.Presenter
+import androidx.leanback.widget.Row
 import androidx.leanback.widget.RowHeaderPresenter
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
@@ -28,32 +28,38 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
     }
 
     override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
-        (item as? ListRow)?.headerItem?.name?.let { name ->
-            viewHolder.view?.let { subView ->
-                subView.findViewById<TextView>(R.id.header_sub).text = name
-                when {
-                    name == subView.context.getString(R.string.settings) -> {
-                        subView.findViewById<ImageView>(R.id.header_icon).setImageResource(R.drawable.ic_settings)
-                    }
-                    name == subView.context.getString(R.string.browse) -> {
-                        subView.findViewById<ImageView>(R.id.header_icon).setImageDrawable(null)
-                    }
-                    else -> {
-                        client?.getCreatorByName(name) { creator ->
-                            val logoPath = creator.icon?.path
-                            if (!logoPath.isNullOrEmpty()) {
-                                Glide.with(subView)
-                                    .load(
-                                        GlideUrl(
-                                            logoPath, LazyHeaders.Builder()
-                                                .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
-                                                .build()
-                                        )
-                                    )
-                                    .apply(RequestOptions.circleCropTransform())
-                                    .into(subView.findViewById(R.id.header_icon))
-                            }
-                        }
+        val row = item as? Row ?: return
+        val name = row.headerItem?.name ?: return
+        val subView = viewHolder.view ?: return
+        subView.findViewById<TextView>(R.id.header_sub).text = name
+        val iconView = subView.findViewById<ImageView>(R.id.header_icon)
+
+        when {
+            name == subView.context.getString(R.string.settings) -> {
+                iconView.setImageResource(R.drawable.ic_settings)
+            }
+            name == subView.context.getString(R.string.browse) -> {
+                iconView.setImageDrawable(null)
+            }
+            else -> {
+                // Look up by GUID (from CreatorHeaderItem) to avoid name-collision and
+                // to handle async cache fills — getCreatorById fires the callback once the
+                // icon is available, whether or not the cache was already warm.
+                val guid = (row.headerItem as? CreatorHeaderItem)?.creatorGUID ?: return
+                iconView.setImageDrawable(null)
+                client?.getCreatorById(guid) { creator ->
+                    val logoPath = creator.icon?.path
+                    if (!logoPath.isNullOrEmpty() && subView.isAttachedToWindow) {
+                        Glide.with(subView)
+                            .load(
+                                GlideUrl(
+                                    logoPath, LazyHeaders.Builder()
+                                        .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
+                                        .build()
+                                )
+                            )
+                            .apply(RequestOptions.circleCropTransform())
+                            .into(iconView)
                     }
                 }
             }
