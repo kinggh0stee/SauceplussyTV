@@ -2,6 +2,7 @@ package com.saucedplussytv.androidtv.browse;
 
 import android.os.Bundle;
 import androidx.annotation.Nullable;
+import androidx.leanback.app.BrowseSupportFragment;
 import androidx.leanback.app.VerticalGridSupportFragment;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.VerticalGridPresenter;
@@ -11,7 +12,16 @@ import com.saucedplussytv.androidtv.models.VideoProgress;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BrowseGridFragment extends VerticalGridSupportFragment {
+public class BrowseGridFragment extends VerticalGridSupportFragment
+        implements BrowseSupportFragment.MainFragmentAdapterProvider {
+
+    private final BrowseSupportFragment.MainFragmentAdapter<BrowseGridFragment> mMainFragmentAdapter =
+            new BrowseSupportFragment.MainFragmentAdapter<>(this);
+
+    @Override
+    public BrowseSupportFragment.MainFragmentAdapter getMainFragmentAdapter() {
+        return mMainFragmentAdapter;
+    }
 
     interface OnNearEndListener {
         void onNearEnd();

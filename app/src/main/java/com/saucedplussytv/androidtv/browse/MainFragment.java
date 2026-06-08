@@ -555,13 +555,11 @@ public class MainFragment extends BrowseSupportFragment {
         if (isPagination) {
             appendVideosToRows();
         } else {
-            // Initial load - wait for all subscriptions to finish, then do full refresh
-            if (subCount > 1) {
-                subCount--;
-            } else {
+            subCount--;
+            refreshRows(); // render with whatever has arrived so far — don't wait for all subs
+            if (subCount == 0) {
                 subCount = subscriptions.size();
-                refreshRows();        // show grid immediately
-                fetchProgressAsync(); // update progress in background
+                fetchProgressAsync();
             }
         }
     }
