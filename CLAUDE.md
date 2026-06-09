@@ -77,8 +77,7 @@ SocketClient.getInstance(context)
 - **Languages:** mixed Kotlin + Java — match the surrounding file's language.
 - **Playback:** AndroidX Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session, media3-datasource-okhttp).
 - **Networking:** Volley + OkHttp 5 + `socket.io-client 2.1.2`; Gson for JSON.
-- **UI/misc:** Glide (images), PrettyTime, versioncompare.
-- **ZXing** dependency is present but currently unused — QR features were removed with the Keycloak auth rewrite.
+- **UI/misc:** Glide 5 (images), PrettyTime, versioncompare.
 
 ## Rebrand status
 

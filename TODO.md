@@ -1,5 +1,22 @@
 # SaucedplussyTV TODO / Roadmap
 
+## High Priority — Technical Debt
+
+- **`getActivity()` null-safety** — async callbacks call `getActivity()` without null guard;
+  can NPE on fragment detach. Fix by capturing activity once at top of callback and returning
+  early if null/not-added. Pattern already used in the same files at the lines noted.
+  - `MainFragment.java`: lines 182, 881, 899, 904, 912, 918, 988, 992
+  - `VideoDetailsFragment.java`: lines 84, 95, 241, 254, 270, 275, 279
+
+- **`liveHandler` Handler/Looper → coroutines** — `MainFragment.java` uses
+  `new Handler(Looper.getMainLooper())` for the live-check polling loop (10s repeat, line 95)
+  and UI scheduling (lines 122, 192, 348, 648, 681–698). Migrate to
+  `viewLifecycleOwner.lifecycleScope`. Note: this is Java code — consider extracting the loop
+  to a Kotlin helper rather than inline Java coroutine boilerplate.
+
+- **Deprecation cleanup** — ~90 lint warnings remain after compileSdk 37 bump; reassess and
+  address remaining deprecated API usages.
+
 ## Medium Priority
 
 ### Dependency Updates
@@ -10,6 +27,9 @@
 - ~~**ZXing:** removed (QR features unused since Keycloak rewrite)~~
 - ~~**OkHttp:** done (5.3.2)~~
 - ~~**Volley:** done (1.2.1, no upstream release since 2021)~~
+- ~~**socket.io-client:** done (2.1.2)~~
+- ~~**lifecycle:** done (2.10.0)~~
+- ~~**prettytime:** done (5.0.9.Final)~~
 
 ### Build & Tooling
 - ~~**CompileSdk:** done (37)~~
@@ -17,9 +37,9 @@
 - ~~**CI/CD:** GitHub Actions for automated builds~~
 
 ### Code Quality
-- ~~**Coroutine adoption:** done — AuthManager writes are now fire-and-forget `scope.launch`; no raw Threads exist~~
+- ~~**Coroutine adoption:** done — AuthManager writes are fire-and-forget `scope.launch`; WebLoginActivity polling migrated; no raw Threads remain~~
 - ~~**SharedPreferences → DataStore:** done — AuthManager fully migrated; zero SharedPreferences usages remain~~
-- **Deprecation cleanup:** Partially done (96→90 warnings); reassess with compileSdk 37
+- ~~**Remove deprecated APIs:** partially done (deprecated imports + mipmap-anydpi-v26 removed); see Deprecation cleanup above~~
 
 ## Low Priority / Ideas
 
@@ -29,7 +49,7 @@
 
 **Biggest UX holes (TV-appropriate):**
 - **Search** (`/api/v3/content/search`) — no search UI at all
-- **Subtitles / CC** (`/api/cms/v3/content/upload/texttrack`) — no text track selection
+- ~~**Subtitles / CC** (`/api/cms/v3/content/upload/texttrack`)~~ done
 - **Manual quality selection** — auto-picks highest enabled variant; no user override
 - **Watch history page** (`/api/v3/content/history`) — no "Continue watching" row
 
@@ -80,7 +100,7 @@
 - [x] Android Gradle Plugin 8.13.1 → 9.2.1
 - [x] Kotlin 1.6.21 → 2.4.0
 - [x] ExoPlayer 2.17.1 → 2.19.1
-- [x] ExoPlayer 2.x → Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session)
+- [x] ExoPlayer 2.x → Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session, media3-datasource-okhttp)
 - [x] Auth rewrite: Keycloak OIDC → WebView cookie-session
 - [x] API host: floatplane.com → sauceplus.com
 - [x] App rebrand: Hydravion → SaucedplussyTV
@@ -88,3 +108,15 @@
 - [x] Brand colors: res/values/colors.xml updated
 - [x] Subtitle / CC track selection (Media3 TrackSelectionOverride)
 - [x] Playback speed control (0.5×–2×)
+- [x] AndroidX Leanback 1.0.0 → 1.2.0
+- [x] AndroidX DataStore migration (SharedPreferences → datastore-preferences 1.1.1)
+- [x] WebLoginActivity polling: Handler/Runnable → lifecycleScope coroutines
+- [x] Removed deprecated imports and mipmap-anydpi-v26 qualifier
+- [x] ZXing dependency removed (was unused since Keycloak rewrite)
+- [x] socket.io-client 1.0.1 → 2.1.2
+- [x] lifecycle 2.4.1 → 2.10.0 (livedata-ktx + viewmodel-ktx)
+- [x] OkHttp 4.12.0 → 5.3.2
+- [x] Gson 2.11.0 → 2.14.0
+- [x] Glide 4.16.0 → 5.0.7
+- [x] prettytime 5.0.0.Final → 5.0.9.Final
+- [x] compileSdk 34 → 37
