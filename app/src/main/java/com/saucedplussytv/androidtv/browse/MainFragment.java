@@ -93,7 +93,6 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean backgroundManagerPrepared = false;
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
-    private boolean adapterInitialized = false;
 
     private BrowseGridFragment gridFragment;
     private List<Video> pendingBrowseVideos;
@@ -446,8 +445,8 @@ public class MainFragment extends BrowseSupportFragment {
             setAdapter(null);
         }
 
-        // Reset adapter initialization flag (both Fragment and ViewModel copies)
-        adapterInitialized = false;
+        // Reset adapter initialization flag
+        mainViewModel.adapterInitialized = false;
 
         // Reset grid fragment state
         gridFragment = null;
@@ -503,7 +502,6 @@ public class MainFragment extends BrowseSupportFragment {
         rowsAdapter.add(new ListRow(new HeaderItem(nextRowId++, getString(R.string.settings)), settingsAdapter));
 
         setAdapter(rowsAdapter);
-        adapterInitialized = true;
         mainViewModel.adapterInitialized = true;
         pendingBrowseVideos = allVideos;
 
@@ -724,7 +722,6 @@ public class MainFragment extends BrowseSupportFragment {
                 rowsAdapter = null;
                 nextRowId = 1;
                 settingsRowIndex = -1;
-                adapterInitialized = false;
                 if (getAdapter() != null) setAdapter(null);
                 gridFragment = null;
                 pendingBrowseVideos = null;
