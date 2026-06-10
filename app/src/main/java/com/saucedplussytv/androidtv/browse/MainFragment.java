@@ -35,7 +35,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -56,7 +55,6 @@ import com.saucedplussytv.androidtv.client.SocketClient;
 import com.saucedplussytv.androidtv.client.SyncEvent;
 import com.saucedplussytv.androidtv.client.UserSync;
 import com.saucedplussytv.androidtv.detail.DetailsActivity;
-import com.saucedplussytv.androidtv.ext.MapExtensionKt;
 import com.saucedplussytv.androidtv.models.Thumbnail;
 import com.saucedplussytv.androidtv.models.Video;
 import com.saucedplussytv.androidtv.models.VideoInfo;
@@ -139,7 +137,7 @@ public class MainFragment extends BrowseSupportFragment {
             result -> {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                     if (result.getData().getBooleanExtra("REFRESH", false)) {
-                        refreshVideoProgress();
+                        if (isLoggedIn) mainViewModel.refreshVideoProgress();
                     }
                 }
             }
@@ -183,11 +181,41 @@ public class MainFragment extends BrowseSupportFragment {
                     .show();
         });
 
-        mainViewModel.setOnVideosReadyCallback((creatorGUID, vids) -> {
+        mainViewModel.getCreatorVideosUpdated().observe(getViewLifecycleOwner(), event -> {
+            CreatorVideos cv = event.getContentIfNotHandled();
+            if (cv == null) return;
             Activity a = getActivity();
-            if (a == null || !isAdded()) return Unit.INSTANCE;
-            gotVideos(creatorGUID, vids);
-            return Unit.INSTANCE;
+            if (a == null || !isAdded() || !isLoggedIn) return;
+            if (cv.isPagination()) {
+                appendVideosToRows(cv.getCreatorGUID());
+            } else if (cv.getNeedsInitRows()) {
+                // Adapter not yet initialized — rebuild rows from current data
+                initRows();
+                if (mainViewModel.subCount == 0) {
+                    mainViewModel.subCount = mainViewModel.getSubscriptions().size();
+                    mainViewModel.fetchProgressAsync();
+                }
+            } else {
+                // Adapter already exists — update browse grid and creator row
+                List<Video> allVideos = mainViewModel.getMergedVideos();
+                if (gridFragment != null) {
+                    gridFragment.replaceVideos(allVideos, mainViewModel.getVideoProgress());
+                } else {
+                    pendingBrowseVideos = allVideos;
+                }
+                addOrUpdateSubRow(cv.getCreatorGUID());
+                if (mainViewModel.subCount == 0) {
+                    mainViewModel.subCount = mainViewModel.getSubscriptions().size();
+                    mainViewModel.fetchProgressAsync();
+                }
+            }
+        });
+
+        mainViewModel.getVideoProgressUpdated().observe(getViewLifecycleOwner(), ignored -> {
+            BrowseGridFragment frag = gridFragment;
+            if (frag != null && isAdded() && isLoggedIn) {
+                frag.updateProgress(mainViewModel.getVideoProgress());
+            }
         });
 
         getMainFragmentRegistry().registerFragment(PageRow.class, new BrowseSupportFragment.FragmentFactory<BrowseGridFragment>() {
@@ -425,6 +453,7 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Reset adapter initialization flag
         adapterInitialized = false;
+        mainViewModel.adapterInitialized = false;
 
         // Reset grid fragment state
         gridFragment = null;
@@ -451,96 +480,9 @@ public class MainFragment extends BrowseSupportFragment {
         checkLogin();
     }
 
-    private void gotVideos(String creatorGUID, Video[] vids) {
-        if (!isAdded() || getActivity() == null) return;
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring video update - user is logged out");
-            return;
-        }
-
-        if (vids == null) return;
-
-        // Extract creator name from video payload (avoids a separate API call per creator).
-        if (vids.length > 0 && vids[0].getCreator() != null
-                && !mainViewModel.getCreatorNames().containsKey(creatorGUID)) {
-            String name = vids[0].getCreator().getTitle();
-            if (!name.isEmpty()) mainViewModel.getCreatorNames().put(creatorGUID, name);
-        }
-
-        List<Video> existing = mainViewModel.getVideosFor(creatorGUID);
-        boolean isPagination = adapterInitialized && existing != null && !existing.isEmpty();
-
-        if (existing != null && !existing.isEmpty()) {
-            existing.addAll(Arrays.asList(vids));
-        } else {
-            mainViewModel.getVideos().put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
-        }
-
-        if (isPagination) {
-            appendVideosToRows();
-            updateSubRow(creatorGUID);
-        } else {
-            mainViewModel.subCount--;
-            if (!adapterInitialized) {
-                initRows();
-            } else {
-                // Rows already built — update Browse grid, then add/update the creator row.
-                List<Video> allVideos = mergeSortAllVideos();
-                if (gridFragment != null) {
-                    gridFragment.replaceVideos(allVideos, mainViewModel.getVideoProgress());
-                } else {
-                    pendingBrowseVideos = allVideos;
-                }
-                addOrUpdateSubRow(creatorGUID);
-            }
-            if (mainViewModel.subCount == 0) {
-                mainViewModel.subCount = mainViewModel.getSubscriptions().size();
-                fetchProgressAsync();
-            }
-        }
-    }
-
-    private void refreshVideoProgress() {
-        if (!isAdded() || getActivity() == null) return;
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring video progress refresh - user is logged out");
-            return;
-        }
-        fetchProgressAsync();
-    }
-
-    private void fetchProgressAsync() {
-        client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(mainViewModel.getVideos()), progress -> {
-            if (!isLoggedIn || !isAdded()) return Unit.INSTANCE;
-            mainViewModel.getVideoProgress().clear();
-            mainViewModel.getVideoProgress().addAll(progress);
-            BrowseGridFragment frag = gridFragment;
-            if (frag != null) frag.updateProgress(mainViewModel.getVideoProgress());
-            return Unit.INSTANCE;
-        });
-    }
-
-    private List<Video> mergeSortAllVideos() {
-        List<Video> all = new ArrayList<>();
-        for (List<Video> vids : mainViewModel.getVideos().values()) {
-            if (vids != null) all.addAll(vids);
-        }
-        all.sort((a, b) -> {
-            String da = a.getReleaseDate();
-            String db = b.getReleaseDate();
-            // Empty strings sort to the end (oldest). Lexicographic order is correct
-            // for the RFC 3339 UTC 'Z'-suffix timestamps the Sauce+ API returns.
-            if (da.isEmpty() && db.isEmpty()) return 0;
-            if (da.isEmpty()) return 1;
-            if (db.isEmpty()) return -1;
-            return db.compareTo(da);
-        });
-        return all;
-    }
-
     private void initRows() {
         if (!isAdded() || getActivity() == null || !isLoggedIn) return;
-        List<Video> allVideos = mergeSortAllVideos();
+        List<Video> allVideos = mainViewModel.getMergedVideos();
         nextRowId = 1;
 
         rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
@@ -575,6 +517,7 @@ public class MainFragment extends BrowseSupportFragment {
 
         setAdapter(rowsAdapter);
         adapterInitialized = true;
+        mainViewModel.adapterInitialized = true;
         pendingBrowseVideos = allVideos;
 
         liveHandler.post(() -> setSelectedPosition(rowSelected, false, null));
@@ -644,12 +587,13 @@ public class MainFragment extends BrowseSupportFragment {
         liveHandler.post(runnable);
     }
 
-    private void appendVideosToRows() {
+    private void appendVideosToRows(String creatorGUID) {
         if (!isLoggedIn) return;
-        List<Video> allVideos = mergeSortAllVideos();
+        List<Video> allVideos = mainViewModel.getMergedVideos();
         if (gridFragment != null) {
             gridFragment.appendUniqueVideos(allVideos);
         }
+        updateSubRow(creatorGUID);
     }
 
     private void addToRow(Video video) {
@@ -704,7 +648,7 @@ public class MainFragment extends BrowseSupportFragment {
                 } else {
                     mainViewModel.getCreatorPages().put(creator, nextPage);
                 }
-                gotVideos(creator, vids);
+                mainViewModel.gotVideos(creator, vids);
                 if (remaining.decrementAndGet() == 0) mainViewModel.paginationInFlight = false;
                 return Unit.INSTANCE;
             });
@@ -831,6 +775,7 @@ public class MainFragment extends BrowseSupportFragment {
                 nextRowId = 1;
                 settingsRowIndex = -1;
                 adapterInitialized = false;
+                mainViewModel.adapterInitialized = false;
                 gridFragment = null;
                 pendingBrowseVideos = null;
                 mainViewModel.paginationInFlight = false;

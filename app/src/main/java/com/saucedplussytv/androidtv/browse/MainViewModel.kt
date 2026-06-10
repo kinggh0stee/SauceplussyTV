@@ -20,6 +20,12 @@ import java.util.NavigableMap
 import java.util.TreeMap
 import javax.inject.Inject
 
+data class CreatorVideos(
+    val creatorGUID: String,
+    val isPagination: Boolean,
+    val needsInitRows: Boolean
+)
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     val client: SaucedplussyTVClient,
@@ -41,12 +47,19 @@ class MainViewModel @Inject constructor(
     @JvmField var subsRetryCount: Int = 0
     @JvmField var paginationInFlight: Boolean = false
 
+    // adapterInitialized is read by gotVideos() to decide between init vs update path.
+    // Fragment still owns the adapter; ViewModel reads this flag via the setter below.
+    @JvmField var adapterInitialized: Boolean = false
+
     // --- LiveData events ---
     private val _sessionExpired = MutableLiveData<Event<Unit>>()
     val sessionExpired: LiveData<Event<Unit>> = _sessionExpired
 
     private val _noSubscriptions = MutableLiveData<Event<Unit>>()
     val noSubscriptions: LiveData<Event<Unit>> = _noSubscriptions
+
+    private val _creatorVideosUpdated = MutableLiveData<Event<CreatorVideos>>()
+    val creatorVideosUpdated: LiveData<Event<CreatorVideos>> = _creatorVideosUpdated
 
     // --- Retry handler (lives entirely in the ViewModel) ---
     private val retryHandler = Handler(Looper.getMainLooper())
@@ -55,11 +68,29 @@ class MainViewModel @Inject constructor(
     fun getSubscriptions(): MutableList<Subscription> = _subscriptions
     fun getVideos(): HashMap<String, ArrayList<Video>> = _videos
     fun getVideosFor(guid: String): ArrayList<Video>? = _videos[guid]
+    fun getMergedVideos(): List<Video> {
+        val all = mutableListOf<Video>()
+        for (vids in _videos.values) {
+            if (vids != null) all.addAll(vids)
+        }
+        all.sortWith { a, b ->
+            val da = a.releaseDate ?: ""
+            val db = b.releaseDate ?: ""
+            when {
+                da.isEmpty() && db.isEmpty() -> 0
+                da.isEmpty() -> 1
+                db.isEmpty() -> -1
+                else -> db.compareTo(da)
+            }
+        }
+        return all
+    }
     fun getStrms(): NavigableMap<Int, Video> = _strms
     fun getVideoProgress(): MutableList<VideoProgress> = _videoProgress
     fun getCreatorPages(): HashMap<String, Int> = _creatorPages
     fun getExhaustedCreators(): HashMap<String, Boolean> = _exhaustedCreators
     fun getCreatorNames(): HashMap<String, String> = _creatorNames
+    fun getStreams(): NavigableMap<Int, Video> = _strms
 
     // --- Subscription loading ---
 
@@ -68,7 +99,6 @@ class MainViewModel @Inject constructor(
         client.getSubs { subs ->
             if (loadGeneration != gen) return@getSubs
             if (subs == null) {
-                // Retry a few times before signalling session expiry
                 if (subsRetryCount < 3) {
                     subsRetryCount++
                     retryHandler.postDelayed({
@@ -113,7 +143,7 @@ class MainViewModel @Inject constructor(
                 }
                 client.getVideos(sub.creator!!, 1) { vids ->
                     if (loadGeneration != gen) return@getVideos
-                    onVideosReady(sub.creator!!, vids)
+                    gotVideos(sub.creator!!, vids)
                 }
             }
         }
@@ -128,33 +158,91 @@ class MainViewModel @Inject constructor(
     }
 
     fun gotLiveInfo(sub: Subscription, live: Delivery) {
-        if (live.groups == null || live.groups.isEmpty()
-            || live.groups[0].origins == null || live.groups[0].origins.isEmpty()
-            || live.groups[0].variants == null || live.groups[0].variants.isEmpty()
-        ) return
-        val l = live.groups[0].origins[0].url + live.groups[0].variants[0].url
+        val groups = live.groups ?: return
+        if (groups.isEmpty()) return
+        val group = groups[0]
+        val origins = group.origins ?: return
+        if (origins.isEmpty()) return
+        val variants = group.variants ?: return
+        if (variants.isEmpty()) return
+        val l = origins[0].url + variants[0].url
         sub.streamUrl = l
         client.checkLive(l) { status ->
             sub.streaming = (status == 200)
         }
     }
 
-    // Called from Fragment's onGridNearEnd as a pass-through (pagination still partly in Fragment for now)
-    fun onVideosReady(creatorGUID: String, vids: Array<Video>?) {
-        // Will be fully implemented in step 4; for now, delegate back to Fragment via callback
-        _onVideosReadyCallback?.invoke(creatorGUID, vids)
+    // --- Video model mutation (model half of gotVideos) ---
+
+    fun gotVideos(creatorGUID: String, vids: Array<Video>?) {
+        if (vids == null) return
+
+        // Extract creator name
+        if (vids.isNotEmpty() && vids[0].creator != null
+            && !_creatorNames.containsKey(creatorGUID)
+        ) {
+            val name = vids[0].creator!!.title
+            if (name.isNotEmpty()) _creatorNames[creatorGUID] = name
+        }
+
+        val existing = _videos[creatorGUID]
+        val isPagination = adapterInitialized && existing != null && existing.isNotEmpty()
+
+        if (existing != null && existing.isNotEmpty()) {
+            existing.addAll(vids.toList())
+        } else {
+            _videos[creatorGUID] = ArrayList(vids.toList())
+        }
+
+        if (isPagination) {
+            paginationInFlight = false
+            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = true, needsInitRows = false)))
+        } else {
+            subCount--
+            // needsInitRows = true means Fragment should call initRows() (not adapterInitialized yet)
+            val needsInitRows = !adapterInitialized
+            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = false, needsInitRows = needsInitRows)))
+        }
     }
 
-    // Temporary bridge: Fragment registers a callback so gotVideos() still works during step 3
-    private var _onVideosReadyCallback: ((String, Array<Video>?) -> Unit)? = null
+    // --- Video progress ---
 
-    fun setOnVideosReadyCallback(cb: (String, Array<Video>?) -> Unit) {
-        _onVideosReadyCallback = cb
+    fun fetchProgressAsync() {
+        val ids = _videos.values.flatMap { it }.map { it.id }
+        client.getVideoProgress(ids) { progress ->
+            _videoProgress.clear()
+            _videoProgress.addAll(progress)
+            _videoProgressUpdated.postValue(Unit)
+        }
+    }
+
+    fun refreshVideoProgress() {
+        fetchProgressAsync()
+    }
+
+    private val _videoProgressUpdated = MutableLiveData<Unit>()
+    val videoProgressUpdated: LiveData<Unit> = _videoProgressUpdated
+
+    // --- Cleanup ---
+
+    fun clearForLogout() {
+        retryHandler.removeCallbacksAndMessages(null)
+        loadGeneration++
+        _subscriptions.clear()
+        _videos.clear()
+        _strms.clear()
+        _videoProgress.clear()
+        _creatorPages.clear()
+        _exhaustedCreators.clear()
+        _creatorNames.clear()
+        subCount = 0
+        subsRetryCount = 0
+        paginationInFlight = false
+        adapterInitialized = false
     }
 
     override fun onCleared() {
         super.onCleared()
         retryHandler.removeCallbacksAndMessages(null)
-        _onVideosReadyCallback = null
     }
 }
