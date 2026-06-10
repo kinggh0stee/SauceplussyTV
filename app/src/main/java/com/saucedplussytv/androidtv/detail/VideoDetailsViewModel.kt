@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient
 import com.saucedplussytv.androidtv.models.Level
 import com.saucedplussytv.androidtv.models.Video
+import com.saucedplussytv.androidtv.util.Event
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
@@ -14,33 +15,49 @@ class VideoDetailsViewModel @Inject constructor(
     private val client: SaucedplussyTVClient
 ) : ViewModel() {
 
-    private val _levels = MutableLiveData<List<Level>>()
-    val levels: LiveData<List<Level>> = _levels
+    private val _levels = MutableLiveData<Event<List<Level>>>()
+    val levels: LiveData<Event<List<Level>>> = _levels
 
-    private val _dataError = MutableLiveData<String>()
-    val dataError: LiveData<String> = _dataError
+    private val _dataError = MutableLiveData<Event<String>>()
+    val dataError: LiveData<Event<String>> = _dataError
+
+    private var isLoadingLevels = false
 
     fun loadLevels(postGuid: String) {
+        if (isLoadingLevels) return
+        isLoadingLevels = true
         client.getPost(postGuid) { post ->
             val attachments = post?.videoAttachments
             if (attachments.isNullOrEmpty()) {
-                _dataError.postValue("Could not load video")
+                _dataError.postValue(Event("Could not load video"))
+                isLoadingLevels = false
                 return@getPost
             }
             val videoGuid = attachments[0].guid
-            if (videoGuid.isEmpty()) return@getPost
+            if (videoGuid.isEmpty()) {
+                _dataError.postValue(Event("Could not load video"))
+                isLoadingLevels = false
+                return@getPost
+            }
             client.getVideoInfo(videoGuid) { videoInfo ->
+                isLoadingLevels = false
                 val levelList = videoInfo?.levels
                 if (levelList == null) {
-                    _dataError.postValue("Could not load video info")
+                    _dataError.postValue(Event("Could not load video info"))
                     return@getVideoInfo
                 }
-                _levels.postValue(levelList)
+                _levels.postValue(Event(levelList))
             }
         }
     }
 
     fun fetchVideoUrl(video: Video, resolution: String, onReady: (Video) -> Unit) {
-        client.getVideo(video, resolution, onReady)
+        client.getVideo(video, resolution) { result ->
+            if (result.vidUrl.isNullOrEmpty()) {
+                _dataError.postValue(Event("Could not load video URL"))
+            } else {
+                onReady(result)
+            }
+        }
     }
 }

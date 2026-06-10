@@ -2,12 +2,10 @@ package com.saucedplussytv.androidtv.detail;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
@@ -25,20 +23,17 @@ import androidx.leanback.widget.ClassPresenterSelector;
 import androidx.leanback.widget.DetailsOverviewRow;
 import androidx.leanback.widget.FullWidthDetailsOverviewRowPresenter;
 import androidx.leanback.widget.FullWidthDetailsOverviewSharedElementHelper;
-import androidx.leanback.widget.ImageCardView;
 import androidx.leanback.widget.OnItemViewClickedListener;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.Row;
 import androidx.leanback.widget.RowPresenter;
 
-import com.android.volley.VolleyError;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.model.GlideUrl;
 import com.bumptech.glide.load.model.LazyHeaders;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
-import com.google.gson.Gson;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -51,10 +46,8 @@ import com.saucedplussytv.androidtv.R;
 import com.saucedplussytv.androidtv.browse.MainActivity;
 import com.saucedplussytv.androidtv.browse.MainFragment;
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient;
-import com.saucedplussytv.androidtv.client.RequestTask;
 import com.saucedplussytv.androidtv.models.Level;
 import com.saucedplussytv.androidtv.models.Video;
-import com.saucedplussytv.androidtv.models.VideoInfo;
 import com.saucedplussytv.androidtv.playback.PlaybackActivity;
 
 @AndroidEntryPoint
@@ -99,8 +92,13 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
             setupDetailsOverviewRowPresenter();
             setAdapter(mAdapter);
             viewModel = new ViewModelProvider(this).get(VideoDetailsViewModel.class);
-            viewModel.getLevels().observe(this, levels -> showResolutionDialog(levels));
-            viewModel.getDataError().observe(this, msg -> {
+            viewModel.getLevels().observe(this, event -> {
+                List<Level> levels = event.getContentIfNotHandled();
+                if (levels != null) showResolutionDialog(levels);
+            });
+            viewModel.getDataError().observe(this, event -> {
+                String msg = event.getContentIfNotHandled();
+                if (msg == null) return;
                 Activity a = getActivity();
                 if (a != null && isAdded()) Toast.makeText(a, msg, Toast.LENGTH_SHORT).show();
             });
