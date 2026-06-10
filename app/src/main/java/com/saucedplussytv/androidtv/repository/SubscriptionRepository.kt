@@ -5,6 +5,7 @@ import com.saucedplussytv.androidtv.models.Video
 import com.saucedplussytv.androidtv.models.VideoProgress
 import com.saucedplussytv.androidtv.subscription.Subscription
 
+/** All callbacks are invoked on the main thread (Volley's ResponseDelivery contract). */
 interface SubscriptionRepository {
     fun getSubs(callback: (Array<Subscription>?) -> Unit)
     fun getLive(sub: Subscription, callback: (Delivery) -> Unit)
