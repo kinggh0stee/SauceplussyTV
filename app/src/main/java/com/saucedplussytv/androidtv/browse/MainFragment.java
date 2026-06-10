@@ -423,15 +423,10 @@ public class MainFragment extends BrowseSupportFragment {
             android.webkit.CookieManager.getInstance().flush();
         }
 
-        // Clear all in-memory data structures
-        mainViewModel.getSubscriptions().clear();
-        mainViewModel.getVideos().clear();
-        mainViewModel.getStrms().clear();
-        mainViewModel.getVideoProgress().clear();
-        mainViewModel.getCreatorPages().clear();
+        // Clear all ViewModel-owned model fields (also cancels retry handler and increments loadGeneration)
+        mainViewModel.clearForLogout();
 
-        // Reset state variables
-        mainViewModel.subCount = 0;
+        // Reset Fragment-owned UI/adapter state
         rowSelected = 0;
         colSelected = 0;
         liveIndex = -1;
@@ -451,16 +446,12 @@ public class MainFragment extends BrowseSupportFragment {
             setAdapter(null);
         }
 
-        // Reset adapter initialization flag
+        // Reset adapter initialization flag (both Fragment and ViewModel copies)
         adapterInitialized = false;
-        mainViewModel.adapterInitialized = false;
 
         // Reset grid fragment state
         gridFragment = null;
         pendingBrowseVideos = null;
-        mainViewModel.paginationInFlight = false;
-        mainViewModel.getExhaustedCreators().clear();
-        mainViewModel.getCreatorNames().clear();
         subRowAdapters.clear();
         rowsAdapter = null;
         nextRowId = 1;
@@ -468,10 +459,6 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Reset UI initialization flag to allow proper setup on next login
         uiInitialized = false;
-
-        // Invalidate any in-flight getVideos callbacks from the previous session
-        mainViewModel.loadGeneration++;
-        mainViewModel.subsRetryCount = 0;
 
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
@@ -730,21 +717,17 @@ public class MainFragment extends BrowseSupportFragment {
     private Unit onSettingsSelected(@NonNull SettingsAction action) {
         switch (action) {
             case REFRESH:
-                mainViewModel.loadGeneration++;
-                mainViewModel.subsRetryCount = 0;
-                mainViewModel.getVideos().clear();
-                mainViewModel.getCreatorPages().clear();
-                mainViewModel.getExhaustedCreators().clear();
-                mainViewModel.getCreatorNames().clear();
+                // Clear ViewModel model state (increments loadGeneration)
+                mainViewModel.clearForLogout();
+                // Clear Fragment adapter/UI state
                 subRowAdapters.clear();
                 rowsAdapter = null;
                 nextRowId = 1;
                 settingsRowIndex = -1;
                 adapterInitialized = false;
-                mainViewModel.adapterInitialized = false;
+                if (getAdapter() != null) setAdapter(null);
                 gridFragment = null;
                 pendingBrowseVideos = null;
-                mainViewModel.paginationInFlight = false;
                 rowSelected = 0;
                 colSelected = 0;
                 mainViewModel.refreshSubscriptions();
