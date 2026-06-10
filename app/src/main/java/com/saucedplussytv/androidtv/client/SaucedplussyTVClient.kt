@@ -16,15 +16,21 @@ import com.saucedplussytv.androidtv.models.*
 import com.saucedplussytv.androidtv.models.Video
 import com.saucedplussytv.androidtv.post.Post
 import com.saucedplussytv.androidtv.subscription.Subscription
+import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONArray
 import org.json.JSONObject
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class SaucedplussyTVClient private constructor(private val context: Context) {
+@Singleton
+class SaucedplussyTVClient @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val authManager: AuthManager
+) {
 
     private val creatorCache: MutableMap<String, Creator> = hashMapOf()
     private val creatorFetchInFlight: MutableSet<String> = hashSetOf()
-    private val requestTask: RequestTask = RequestTask(context)
-    private val authManager: AuthManager = AuthManager.getInstance(context)
+    private val requestTask: RequestTask = RequestTask(context, authManager)
     private val gson = Gson()
 
     fun getSubs(callback: (Array<Subscription>?) -> Unit) {
@@ -580,7 +586,8 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
         fun getInstance(context: Context): SaucedplussyTVClient {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    INSTANCE = SaucedplussyTVClient(context.applicationContext)
+                    val appContext = context.applicationContext
+                    INSTANCE = SaucedplussyTVClient(appContext, AuthManager.getInstance(appContext))
                 }
             }
 

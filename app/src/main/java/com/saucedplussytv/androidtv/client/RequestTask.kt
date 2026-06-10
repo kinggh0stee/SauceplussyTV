@@ -6,8 +6,13 @@ import com.android.volley.toolbox.JsonRequest
 import com.android.volley.toolbox.StringRequest
 import com.android.volley.toolbox.Volley
 import com.saucedplussytv.androidtv.authenticate.AuthManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 
-class RequestTask(context: Context) {
+class RequestTask @Inject constructor(
+    @ApplicationContext context: Context,
+    private val authManager: AuthManager
+) {
 
     private val volleyQueue: RequestQueue = Volley.newRequestQueue(context, OkHttpStack())
 
@@ -17,7 +22,7 @@ class RequestTask(context: Context) {
     private fun authHeaders(sessionCookie: String, contentType: String? = null): Map<String, String> {
         val headers = linkedMapOf(
             "Accept" to ACCEPT_JSON,
-            "User-Agent" to AuthManager.peekUserAgent()
+            "User-Agent" to authManager.getUserAgent()
         )
         if (sessionCookie.isNotEmpty()) headers["Cookie"] = sessionCookie
         if (contentType != null) headers["Content-Type"] = contentType
