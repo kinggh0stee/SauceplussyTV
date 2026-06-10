@@ -38,8 +38,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.NavigableMap;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.saucedplussytv.androidtv.card.CardPresenter;
 
@@ -87,13 +85,6 @@ public class MainFragment extends BrowseSupportFragment {
     private Socket socket;
     private final Gson gson = new Gson();
 
-    private List<Subscription> subscriptions = new ArrayList<>();
-    private NavigableMap<Integer, Video> strms = new TreeMap<>();
-    private HashMap<String, ArrayList<Video>> videos = new HashMap<>();
-    private List<VideoProgress> videoProgress = new ArrayList<>();
-    private int subCount;
-    private final HashMap<String, Integer> creatorPages = new HashMap<>();
-
     private int rowSelected;
     private int colSelected;
 
@@ -106,14 +97,9 @@ public class MainFragment extends BrowseSupportFragment {
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
     private boolean adapterInitialized = false;
-    private int loadGeneration = 0;
-    private int subsRetryCount = 0;
 
     private BrowseGridFragment gridFragment;
     private List<Video> pendingBrowseVideos;
-    private boolean paginationInFlight = false;
-    private final HashMap<String, Boolean> exhaustedCreators = new HashMap<>();
-    private final HashMap<String, String> creatorNames = new HashMap<>();
     private final HashMap<String, ArrayObjectAdapter> subRowAdapters = new HashMap<>();
     private ArrayObjectAdapter rowsAdapter;
     private long nextRowId = 1;
@@ -177,7 +163,7 @@ public class MainFragment extends BrowseSupportFragment {
                     MainFragment.this::onVideoSelected, MainFragment.this::onSettingsSelected));
                 if (pendingBrowseVideos != null) {
                     frag.pendingVideos = pendingBrowseVideos;
-                    frag.pendingProgress = videoProgress;
+                    frag.pendingProgress = mainViewModel.getVideoProgress();
                     pendingBrowseVideos = null;
                 }
                 return frag;
@@ -239,7 +225,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void initialize() {
-        subsRetryCount = 0;
+        mainViewModel.subsRetryCount = 0;
         refreshSubscriptions();
         prepareBackgroundManager();
         
@@ -314,7 +300,7 @@ public class MainFragment extends BrowseSupportFragment {
                 th.setPath(event.getData().getIcon());
                 // Find the stream in strms that belongs to this creator's subscription
                 String creatorId = event.getData().getCreator();
-                for (java.util.Map.Entry<Integer, Video> entry : strms.entrySet()) {
+                for (java.util.Map.Entry<Integer, Video> entry : mainViewModel.getStrms().entrySet()) {
                     Video stream = entry.getValue();
                     if (stream != null && stream.getCreator() != null
                             && creatorId.equalsIgnoreCase(stream.getCreator().getId())) {
@@ -373,14 +359,14 @@ public class MainFragment extends BrowseSupportFragment {
         }
 
         // Clear all in-memory data structures
-        subscriptions.clear();
-        videos.clear();
-        strms.clear();
-        videoProgress.clear();
-        creatorPages.clear();
+        mainViewModel.getSubscriptions().clear();
+        mainViewModel.getVideos().clear();
+        mainViewModel.getStrms().clear();
+        mainViewModel.getVideoProgress().clear();
+        mainViewModel.getCreatorPages().clear();
 
         // Reset state variables
-        subCount = 0;
+        mainViewModel.subCount = 0;
         rowSelected = 0;
         colSelected = 0;
         liveIndex = -1;
@@ -406,9 +392,9 @@ public class MainFragment extends BrowseSupportFragment {
         // Reset grid fragment state
         gridFragment = null;
         pendingBrowseVideos = null;
-        paginationInFlight = false;
-        exhaustedCreators.clear();
-        creatorNames.clear();
+        mainViewModel.paginationInFlight = false;
+        mainViewModel.getExhaustedCreators().clear();
+        mainViewModel.getCreatorNames().clear();
         subRowAdapters.clear();
         rowsAdapter = null;
         nextRowId = 1;
@@ -418,8 +404,8 @@ public class MainFragment extends BrowseSupportFragment {
         uiInitialized = false;
 
         // Invalidate any in-flight getVideos callbacks from the previous session
-        loadGeneration++;
-        subsRetryCount = 0;
+        mainViewModel.loadGeneration++;
+        mainViewModel.subsRetryCount = 0;
 
         // Mark as logged out to prevent callbacks from updating UI
         isLoggedIn = false;
@@ -457,24 +443,24 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void refreshSubscriptions() {
-        final int gen = loadGeneration;
+        final int gen = mainViewModel.loadGeneration;
         client.getSubs(subscriptions -> {
-            if (loadGeneration != gen) return Unit.INSTANCE;
+            if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
             if (!isAdded() || getContext() == null) return Unit.INSTANCE;
             if (subscriptions == null) {
                 // Retry a few times before showing the dialog — the session cookie can
                 // take several seconds to propagate to the backend after a fresh login.
-                if (subsRetryCount < 3) {
-                    subsRetryCount++;
-                    dLog(TAG, "getSubs returned null, retry " + subsRetryCount + "/3 in 3s");
+                if (mainViewModel.subsRetryCount < 3) {
+                    mainViewModel.subsRetryCount++;
+                    dLog(TAG, "getSubs returned null, retry " + mainViewModel.subsRetryCount + "/3 in 3s");
                     liveHandler.postDelayed(() -> {
-                        if (loadGeneration == gen && isLoggedIn && isAdded()) {
+                        if (mainViewModel.loadGeneration == gen && isLoggedIn && isAdded()) {
                             refreshSubscriptions();
                         }
                     }, 3000);
                     return Unit.INSTANCE;
                 }
-                subsRetryCount = 0;
+                mainViewModel.subsRetryCount = 0;
                 new AlertDialog.Builder(getContext())
                         .setTitle("Session Expired")
                         .setMessage("Your SaucedplussyTV session has expired. Please log in again.")
@@ -488,7 +474,7 @@ public class MainFragment extends BrowseSupportFragment {
                         .create()
                         .show();
             } else {
-                subsRetryCount = 0;
+                mainViewModel.subsRetryCount = 0;
                 if (subscriptions.length == 0) {
                     new AlertDialog.Builder(getContext())
                             .setTitle("No Subscriptions Found")
@@ -527,25 +513,26 @@ public class MainFragment extends BrowseSupportFragment {
                 trimmed.add(sub);
             }
         }
-        subscriptions = trimmed;
-        final int gen = loadGeneration;
+        mainViewModel.getSubscriptions().clear();
+        mainViewModel.getSubscriptions().addAll(trimmed);
+        final int gen = mainViewModel.loadGeneration;
         int pending = 0;
-        for (Subscription sub : subscriptions) {
+        for (Subscription sub : mainViewModel.getSubscriptions()) {
             if (sub.getCreator() != null) {
                 pending++;
                 client.getLive(sub, live -> {
-                    if (loadGeneration != gen) return Unit.INSTANCE;
+                    if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
                     gotLiveInfo(sub, live);
                     return Unit.INSTANCE;
                 });
-                client.getVideos(sub.getCreator(), 1, videos -> {
-                    if (loadGeneration != gen) return Unit.INSTANCE;
-                    gotVideos(sub.getCreator(), videos);
+                client.getVideos(sub.getCreator(), 1, vids -> {
+                    if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
+                    gotVideos(sub.getCreator(), vids);
                     return Unit.INSTANCE;
                 });
             }
         }
-        subCount = pending;
+        mainViewModel.subCount = pending;
         dLog("ROWS", trimmed.size() + "");
     }
 
@@ -570,39 +557,39 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Extract creator name from video payload (avoids a separate API call per creator).
         if (vids.length > 0 && vids[0].getCreator() != null
-                && !creatorNames.containsKey(creatorGUID)) {
+                && !mainViewModel.getCreatorNames().containsKey(creatorGUID)) {
             String name = vids[0].getCreator().getTitle();
-            if (!name.isEmpty()) creatorNames.put(creatorGUID, name);
+            if (!name.isEmpty()) mainViewModel.getCreatorNames().put(creatorGUID, name);
         }
 
-        List<Video> existing = videos.get(creatorGUID);
+        List<Video> existing = mainViewModel.getVideosFor(creatorGUID);
         boolean isPagination = adapterInitialized && existing != null && !existing.isEmpty();
 
         if (existing != null && !existing.isEmpty()) {
             existing.addAll(Arrays.asList(vids));
         } else {
-            videos.put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
+            mainViewModel.getVideos().put(creatorGUID, new ArrayList<>(Arrays.asList(vids)));
         }
 
         if (isPagination) {
             appendVideosToRows();
             updateSubRow(creatorGUID);
         } else {
-            subCount--;
+            mainViewModel.subCount--;
             if (!adapterInitialized) {
                 initRows();
             } else {
                 // Rows already built — update Browse grid, then add/update the creator row.
                 List<Video> allVideos = mergeSortAllVideos();
                 if (gridFragment != null) {
-                    gridFragment.replaceVideos(allVideos, videoProgress);
+                    gridFragment.replaceVideos(allVideos, mainViewModel.getVideoProgress());
                 } else {
                     pendingBrowseVideos = allVideos;
                 }
                 addOrUpdateSubRow(creatorGUID);
             }
-            if (subCount == 0) {
-                subCount = subscriptions.size();
+            if (mainViewModel.subCount == 0) {
+                mainViewModel.subCount = mainViewModel.getSubscriptions().size();
                 fetchProgressAsync();
             }
         }
@@ -618,18 +605,19 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void fetchProgressAsync() {
-        client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(videos), progress -> {
+        client.getVideoProgress(MapExtensionKt.getBlogPostIdsFromCreatorMap(mainViewModel.getVideos()), progress -> {
             if (!isLoggedIn || !isAdded()) return Unit.INSTANCE;
-            videoProgress = progress;
+            mainViewModel.getVideoProgress().clear();
+            mainViewModel.getVideoProgress().addAll(progress);
             BrowseGridFragment frag = gridFragment;
-            if (frag != null) frag.updateProgress(videoProgress);
+            if (frag != null) frag.updateProgress(mainViewModel.getVideoProgress());
             return Unit.INSTANCE;
         });
     }
 
     private List<Video> mergeSortAllVideos() {
         List<Video> all = new ArrayList<>();
-        for (List<Video> vids : videos.values()) {
+        for (List<Video> vids : mainViewModel.getVideos().values()) {
             if (vids != null) all.addAll(vids);
         }
         all.sort((a, b) -> {
@@ -655,14 +643,14 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Only create rows for creators whose names are already known.
         // addOrUpdateSubRow() will insert the remaining rows as videos arrive.
-        for (Subscription sub : subscriptions) {
+        for (Subscription sub : mainViewModel.getSubscriptions()) {
             String creatorGUID = sub.getCreator();
             if (creatorGUID == null) continue;
-            String name = creatorNames.get(creatorGUID);
+            String name = mainViewModel.getCreatorNames().get(creatorGUID);
             if (name == null || name.isEmpty()) continue;
 
             ArrayObjectAdapter subAdapter = new ArrayObjectAdapter(new CardPresenter(new ArrayList<>()));
-            List<Video> subVideos = videos.get(creatorGUID);
+            List<Video> subVideos = mainViewModel.getVideosFor(creatorGUID);
             if (subVideos != null) {
                 for (Video v : subVideos) subAdapter.add(v);
             }
@@ -695,10 +683,10 @@ public class MainFragment extends BrowseSupportFragment {
             updateSubRow(creatorGUID);
             return;
         }
-        String name = creatorNames.get(creatorGUID);
+        String name = mainViewModel.getCreatorNames().get(creatorGUID);
         if (name == null || name.isEmpty()) return; // Name not yet available
         ArrayObjectAdapter subAdapter = new ArrayObjectAdapter(new CardPresenter(new ArrayList<>()));
-        List<Video> subVideos = videos.get(creatorGUID);
+        List<Video> subVideos = mainViewModel.getVideosFor(creatorGUID);
         if (subVideos != null) for (Video v : subVideos) subAdapter.add(v);
         subRowAdapters.put(creatorGUID, subAdapter);
         // Insert before Settings. settingsRowIndex tracks the exact position — don't rely
@@ -711,7 +699,7 @@ public class MainFragment extends BrowseSupportFragment {
     private void updateSubRow(String creatorGUID) {
         ArrayObjectAdapter adapter = subRowAdapters.get(creatorGUID);
         if (adapter == null) return;
-        List<Video> subVideos = videos.get(creatorGUID);
+        List<Video> subVideos = mainViewModel.getVideosFor(creatorGUID);
         if (subVideos == null) return;
         adapter.clear();
         for (Video v : subVideos) adapter.add(v);
@@ -724,13 +712,13 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void setupLiveCheck() {
         if (liveIndex == -1) {
-            liveIndex = strms.firstKey();
+            liveIndex = mainViewModel.getStrms().firstKey();
         }
 
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
-                final Video stream = strms.get(liveIndex);
+                final Video stream = mainViewModel.getStrms().get(liveIndex);
 
                 if (stream != null) {
                     client.checkLive(stream.getVidUrl(), status -> {
@@ -740,8 +728,8 @@ public class MainFragment extends BrowseSupportFragment {
                         } else {
                             liveHandler.postDelayed(this, 10000);
                         }
-                        Integer next = strms.higherKey(liveIndex);
-                        liveIndex = (next != null) ? next : strms.firstKey();
+                        Integer next = mainViewModel.getStrms().higherKey(liveIndex);
+                        liveIndex = (next != null) ? next : mainViewModel.getStrms().firstKey();
 
                         return Unit.INSTANCE;
                     });
@@ -774,45 +762,45 @@ public class MainFragment extends BrowseSupportFragment {
     void onGridFragmentReady(BrowseGridFragment frag) {
         gridFragment = frag;
         if (pendingBrowseVideos != null && !pendingBrowseVideos.isEmpty()) {
-            frag.replaceVideos(pendingBrowseVideos, videoProgress);
+            frag.replaceVideos(pendingBrowseVideos, mainViewModel.getVideoProgress());
             pendingBrowseVideos = null;
         }
     }
 
     private void onGridNearEnd() {
-        if (paginationInFlight || !isLoggedIn || subscriptions.isEmpty()) return;
+        if (mainViewModel.paginationInFlight || !isLoggedIn || mainViewModel.getSubscriptions().isEmpty()) return;
 
         // Pre-count creators to fetch so we can clear paginationInFlight only after all return.
         int dispatchCount = 0;
-        for (Subscription sub : subscriptions) {
+        for (Subscription sub : mainViewModel.getSubscriptions()) {
             String creator = sub.getCreator();
-            if (creator != null && !Boolean.TRUE.equals(exhaustedCreators.get(creator))) {
+            if (creator != null && !Boolean.TRUE.equals(mainViewModel.getExhaustedCreators().get(creator))) {
                 dispatchCount++;
             }
         }
         if (dispatchCount == 0) return;
 
-        paginationInFlight = true;
-        final int gen = loadGeneration;
+        mainViewModel.paginationInFlight = true;
+        final int gen = mainViewModel.loadGeneration;
         final java.util.concurrent.atomic.AtomicInteger remaining =
                 new java.util.concurrent.atomic.AtomicInteger(dispatchCount);
 
-        for (Subscription sub : subscriptions) {
+        for (Subscription sub : mainViewModel.getSubscriptions()) {
             String creator = sub.getCreator();
-            if (creator == null || Boolean.TRUE.equals(exhaustedCreators.get(creator))) continue;
-            int nextPage = creatorPages.getOrDefault(creator, 1) + 1;
+            if (creator == null || Boolean.TRUE.equals(mainViewModel.getExhaustedCreators().get(creator))) continue;
+            int nextPage = mainViewModel.getCreatorPages().getOrDefault(creator, 1) + 1;
             client.getVideos(creator, nextPage, vids -> {
-                if (loadGeneration != gen) {
-                    if (remaining.decrementAndGet() == 0) paginationInFlight = false;
+                if (mainViewModel.loadGeneration != gen) {
+                    if (remaining.decrementAndGet() == 0) mainViewModel.paginationInFlight = false;
                     return Unit.INSTANCE;
                 }
                 if (vids == null || vids.length == 0) {
-                    exhaustedCreators.put(creator, true);
+                    mainViewModel.getExhaustedCreators().put(creator, true);
                 } else {
-                    creatorPages.put(creator, nextPage);
+                    mainViewModel.getCreatorPages().put(creator, nextPage);
                 }
                 gotVideos(creator, vids);
-                if (remaining.decrementAndGet() == 0) paginationInFlight = false;
+                if (remaining.decrementAndGet() == 0) mainViewModel.paginationInFlight = false;
                 return Unit.INSTANCE;
             });
         }
@@ -927,12 +915,12 @@ public class MainFragment extends BrowseSupportFragment {
     private Unit onSettingsSelected(@NonNull SettingsAction action) {
         switch (action) {
             case REFRESH:
-                loadGeneration++;
-                subsRetryCount = 0;
-                videos.clear();
-                creatorPages.clear();
-                exhaustedCreators.clear();
-                creatorNames.clear();
+                mainViewModel.loadGeneration++;
+                mainViewModel.subsRetryCount = 0;
+                mainViewModel.getVideos().clear();
+                mainViewModel.getCreatorPages().clear();
+                mainViewModel.getExhaustedCreators().clear();
+                mainViewModel.getCreatorNames().clear();
                 subRowAdapters.clear();
                 rowsAdapter = null;
                 nextRowId = 1;
@@ -940,7 +928,7 @@ public class MainFragment extends BrowseSupportFragment {
                 adapterInitialized = false;
                 gridFragment = null;
                 pendingBrowseVideos = null;
-                paginationInFlight = false;
+                mainViewModel.paginationInFlight = false;
                 rowSelected = 0;
                 colSelected = 0;
                 refreshSubscriptions();
@@ -974,7 +962,7 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void selectLivestream() {
         List<String> subs = new ArrayList<>();
-        for (Subscription s : subscriptions) {
+        for (Subscription s : mainViewModel.getSubscriptions()) {
             if (s.getPlan() != null) {
                 subs.add(s.getPlan().getTitle());
             }
@@ -985,7 +973,7 @@ public class MainFragment extends BrowseSupportFragment {
                 .setItems(s, (dialog, which) -> {
                     Activity activity = getActivity();
                     if (activity == null || !isAdded()) return;
-                    String stream = subscriptions.get(which).getStreamUrl();
+                    String stream = mainViewModel.getSubscriptions().get(which).getStreamUrl();
                     if (stream != null) {
                         dLog("LIVE", stream);
                         Video live = new Video();
