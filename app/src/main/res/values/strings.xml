@@ -10,6 +10,8 @@
     <string name="live_stream">Livestream</string>
     <string name="refresh">Refresh</string>
     <string name="action_resume">Resume</string>
+    <string name="security_check">Completing security check…</string>
+    <string name="subtitles">Subtitles</string>
 
     <string-array name="default_colors">
         <item>#311B92</item>

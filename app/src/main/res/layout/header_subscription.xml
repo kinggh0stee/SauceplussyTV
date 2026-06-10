@@ -11,7 +11,8 @@
         android:layout_width="28dp"
         android:layout_height="28dp"
         android:layout_gravity="center_vertical"
-        tools:src="@drawable/exo_ic_settings" />
+        android:importantForAccessibility="no"
+        tools:src="@drawable/ic_settings" />
 
     <TextView
         android:id="@+id/header_sub"

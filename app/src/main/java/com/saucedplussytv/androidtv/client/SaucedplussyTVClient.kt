@@ -140,9 +140,9 @@ class SaucedplussyTVClient private constructor(private val context: Context) {
                     }
                     val cdn = groups[0].origins[0].url
                     val maxRes = res.toIntOrNull() ?: Int.MAX_VALUE
-                    val variants = (groups[0].variants ?: emptyList())
+                    val variants = groups[0].variants
                         .filter { v ->
-                            val vRes = v.name?.substringBefore("-")?.toIntOrNull() ?: 0
+                            val vRes = v.name.substringBefore("-").toIntOrNull() ?: 0
                             vRes <= maxRes
                         }
                         .sortedWith(

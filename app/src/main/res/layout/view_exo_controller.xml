@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    tools:ignore="PrivateResource,ContentDescription">
 
     <TextView
         android:id="@+id/exo_title"
@@ -82,7 +83,7 @@
             <ImageButton
                 android:id="@+id/exo_menu"
                 style="@style/ExoMediaButton"
-                android:src="@drawable/exo_ic_settings"
+                android:src="@drawable/ic_settings"
                 android:tintMode="src_in"/>
 
         </LinearLayout>
@@ -99,7 +100,7 @@
             <ImageButton
                 android:id="@+id/exo_speed"
                 style="@style/ExoMediaButton"
-                android:src="@drawable/exo_ic_speed"
+                android:src="@drawable/ic_playback_speed"
                 android:tintMode="src_in" />
 
             <ImageButton
@@ -107,7 +108,7 @@
                 style="@style/ExoMediaButton"
                 android:src="@drawable/ic_subtitles"
                 android:tintMode="src_in"
-                android:contentDescription="Subtitles" />
+                android:contentDescription="@string/subtitles" />
 
         </LinearLayout>
 

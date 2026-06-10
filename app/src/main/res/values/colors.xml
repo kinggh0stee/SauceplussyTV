@@ -1,15 +1,8 @@
 <resources>
-    <!-- Brand colors -->
-    <color name="brand_primary">#1A1A1A</color>
-    <color name="brand_primary_dark">#0F0F0F</color>
-    <color name="brand_accent">#F5B731</color>
-    <color name="brand_surface">#2D2D2D</color>
-
     <!-- App theme colors -->
     <color name="background_gradient_start">#0F0F0F</color>
     <color name="background_gradient_end">#1A1A1A</color>
     <color name="fastlane_background">#F5B731</color>
-    <color name="search_opaque">#F5B731</color>
     <color name="selected_background">#F5B731</color>
     <color name="default_background">#0F0F0F</color>
     <color name="colorAccent">#F5B731</color>

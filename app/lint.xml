@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Adaptive icons (.xml) alongside fallback bitmaps (.webp) is intentional.
+         The anydpi-v26 XML takes precedence on API 26+; bitmaps serve older launchers. -->
+    <issue id="IconXmlAndPng" severity="ignore" />
+    <!-- ic_launcher_round is the round icon variant; referenced via android:roundIcon in the manifest. -->
+    <issue id="IconMissingDensityFolder" severity="ignore" />
+</lint>
