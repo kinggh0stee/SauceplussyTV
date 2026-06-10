@@ -36,8 +36,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
-import kotlinx.coroutines.Job;
 import com.saucedplussytv.androidtv.card.CardPresenter;
 
 import javax.inject.Inject;
@@ -85,7 +83,6 @@ public class MainFragment extends BrowseSupportFragment {
     private int rowSelected;
     private int colSelected;
 
-    private Job liveCheckJob;
     private boolean backgroundManagerPrepared = false;
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
@@ -266,10 +263,6 @@ public class MainFragment extends BrowseSupportFragment {
 
     @Override
     public void onDestroyView() {
-        if (liveCheckJob != null) {
-            liveCheckJob.cancel(null);
-            liveCheckJob = null;
-        }
         gridFragment = null;
         if (socket != null) {
             socket.disconnect();
@@ -419,12 +412,6 @@ public class MainFragment extends BrowseSupportFragment {
         rowSelected = 0;
         colSelected = 0;
 
-        // Cancel any in-flight live-check coroutine
-        if (liveCheckJob != null) {
-            liveCheckJob.cancel(null);
-            liveCheckJob = null;
-        }
-
         // Disconnect socket if connected
         if (socket != null && socket.connected()) {
             socket.disconnect();
@@ -524,21 +511,6 @@ public class MainFragment extends BrowseSupportFragment {
         if (subVideos == null) return;
         adapter.clear();
         for (Video v : subVideos) adapter.add(v);
-    }
-
-    private void addLiveToRow(Video stream) {
-        // Browse-only layout: all content goes into row 0 (Browse).
-        addToBrowseRow(stream);
-    }
-
-    private void setupLiveCheck() {
-        if (mainViewModel.getStrms().isEmpty()) return;
-        liveCheckJob = MainFragmentExtKt.startLiveCheckLoop(
-            getViewLifecycleOwner(),
-            mainViewModel.getStrms(),
-            client,
-            stream -> addLiveToRow(stream)
-        );
     }
 
     private void appendVideosToRows(String creatorGUID) {
