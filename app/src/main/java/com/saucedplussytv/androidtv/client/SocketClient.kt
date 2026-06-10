@@ -102,19 +102,5 @@ class SocketClient @Inject constructor(
         private const val TAG = "SocketClient"
         private const val SITE = "https://www.sauceplus.com"
         private const val SOCKET_URI = SITE
-        @SuppressLint("StaticFieldLeak")
-        private var INSTANCE: SocketClient? = null
-
-        @Synchronized
-        fun getInstance(context: Context): SocketClient {
-            if (INSTANCE == null) {
-                synchronized(this) {
-                    val appContext = context.applicationContext
-                    INSTANCE = SocketClient(appContext, AuthManager.getInstance(appContext))
-                }
-            }
-
-            return INSTANCE!!
-        }
     }
 }

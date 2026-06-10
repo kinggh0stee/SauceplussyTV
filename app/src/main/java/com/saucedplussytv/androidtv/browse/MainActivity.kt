@@ -4,10 +4,12 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.saucedplussytv.androidtv.R
 import com.saucedplussytv.androidtv.browse.MainFragment
+import dagger.hilt.android.AndroidEntryPoint
 
 /*
  * Main Activity class that loads {@link MainFragment}.
  */
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     public override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.AppTheme_Browse)

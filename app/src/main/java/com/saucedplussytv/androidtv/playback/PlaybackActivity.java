@@ -40,6 +40,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+import javax.inject.Inject;
+import dagger.hilt.android.AndroidEntryPoint;
 import kotlin.Unit;
 import com.saucedplussytv.androidtv.R;
 import com.saucedplussytv.androidtv.authenticate.AuthManager;
@@ -48,10 +50,15 @@ import com.saucedplussytv.androidtv.client.SaucedplussyTVClient;
 import com.saucedplussytv.androidtv.detail.DetailsActivity;
 import com.saucedplussytv.androidtv.models.Video;
 
+@AndroidEntryPoint
 @OptIn(markerClass = UnstableApi.class)
 public class PlaybackActivity extends FragmentActivity {
 
-    private SaucedplussyTVClient client;
+    @Inject
+    SaucedplussyTVClient client;
+
+    @Inject
+    AuthManager authManager;
 
     private PlayerView playerView;
     private ImageView like;
@@ -84,7 +91,6 @@ public class PlaybackActivity extends FragmentActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(this);
         setContentView(R.layout.activity_player);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -320,7 +326,6 @@ public class PlaybackActivity extends FragmentActivity {
             return;
         }
 
-        AuthManager authManager = AuthManager.Companion.getInstance(this);
         authManager.withValidAccessToken(accessToken -> {
             // Check if initialization was cancelled or activity is no longer valid
             if (!initializationInProgress || isFinishing() || isDestroyed()) {

@@ -5,10 +5,12 @@ import android.os.Bundle
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.saucedplussytv.androidtv.R
+import dagger.hilt.android.AndroidEntryPoint
 
 /*
  * Details activity class that loads LeanbackDetailsFragment class
  */
+@AndroidEntryPoint
 class DetailsActivity : AppCompatActivity() {
     /**
      * Called when the activity is first created.

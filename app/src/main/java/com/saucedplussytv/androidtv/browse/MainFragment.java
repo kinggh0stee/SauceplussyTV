@@ -42,6 +42,8 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.saucedplussytv.androidtv.card.CardPresenter;
 
+import javax.inject.Inject;
+import dagger.hilt.android.AndroidEntryPoint;
 import io.github.g00fy2.versioncompare.Version;
 import io.socket.client.Ack;
 import io.socket.client.Socket;
@@ -67,15 +69,20 @@ import com.saucedplussytv.androidtv.subscription.Subscription;
 import com.saucedplussytv.androidtv.post.VideoAttachments;
 import com.saucedplussytv.androidtv.subscription.SubscriptionHeaderPresenter;
 
+@AndroidEntryPoint
 public class MainFragment extends BrowseSupportFragment {
 
     private static final String TAG = "MainFragment";
     public static boolean debug = BuildConfig.DEBUG;
 
-    private SaucedplussyTVClient client;
-    private final String version = BuildConfig.VERSION_NAME;
+    @Inject
+    SaucedplussyTVClient client;
+    @Inject
+    SocketClient socketClient;
+    @Inject
+    AuthManager authManager;
 
-    private SocketClient socketClient;
+    private final String version = BuildConfig.VERSION_NAME;
     private Socket socket;
     private final Gson gson = new Gson();
 
@@ -125,7 +132,6 @@ public class MainFragment extends BrowseSupportFragment {
                     String sessionCookie = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_SESSION_COOKIE);
                     String userAgent = data.getStringExtra(com.saucedplussytv.androidtv.authenticate.WebLoginActivity.EXTRA_USER_AGENT);
                     if (sessionCookie != null && !sessionCookie.isEmpty()) {
-                        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
                         authManager.saveSession(sessionCookie, userAgent != null ? userAgent : "");
                         isLoggedIn = true;
                         // Brief delay: cf_clearance needs ~1s to propagate across CF's CDN
@@ -155,8 +161,6 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onViewCreated(@NonNull android.view.View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(requireActivity());
-        socketClient = SocketClient.Companion.getInstance(requireActivity());
 
         getMainFragmentRegistry().registerFragment(PageRow.class, new BrowseSupportFragment.FragmentFactory<BrowseGridFragment>() {
             @Override
@@ -199,7 +203,6 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void checkLogin() {
-        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
         authManager.withValidAccessToken(accessToken -> {
             dLog("LOGIN", "Access token valid (or refreshed successfully)");
             isLoggedIn = true;
@@ -355,7 +358,6 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void doLogout(boolean clearWebCookies) {
         // Clear the stored Sauce+ session cookie / User-Agent.
-        AuthManager authManager = AuthManager.Companion.getInstance(requireActivity());
         authManager.clearTokens();
 
         if (clearWebCookies) {

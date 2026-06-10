@@ -579,19 +579,5 @@ class SaucedplussyTVClient @Inject constructor(
         private const val URI_UPDATE_PROGRESS = "$SITE/api/v3/content/progress"
 
         private const val LATEST = "https://api.github.com/repos/kinggh0stee/Sauce-AndroidTV/releases/latest"
-        @SuppressLint("StaticFieldLeak") // applicationContext only — no leak
-        private var INSTANCE: SaucedplussyTVClient? = null
-
-        @Synchronized
-        fun getInstance(context: Context): SaucedplussyTVClient {
-            if (INSTANCE == null) {
-                synchronized(this) {
-                    val appContext = context.applicationContext
-                    INSTANCE = SaucedplussyTVClient(appContext, AuthManager.getInstance(appContext))
-                }
-            }
-
-            return INSTANCE!!
-        }
     }
 }

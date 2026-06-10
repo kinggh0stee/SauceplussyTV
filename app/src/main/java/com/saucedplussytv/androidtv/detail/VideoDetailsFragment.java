@@ -43,6 +43,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.inject.Inject;
+import dagger.hilt.android.AndroidEntryPoint;
 import kotlin.Unit;
 import com.saucedplussytv.androidtv.R;
 import com.saucedplussytv.androidtv.browse.MainActivity;
@@ -54,6 +56,7 @@ import com.saucedplussytv.androidtv.models.Video;
 import com.saucedplussytv.androidtv.models.VideoInfo;
 import com.saucedplussytv.androidtv.playback.PlaybackActivity;
 
+@AndroidEntryPoint
 public class VideoDetailsFragment extends DetailsSupportFragment {
 
     private static final String TAG = "VideoDetailsFragment";
@@ -65,7 +68,8 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
     private static final int DETAIL_THUMB_WIDTH = 274;
     private static final int DETAIL_THUMB_HEIGHT = 274;
 
-    private SaucedplussyTVClient client;
+    @Inject
+    SaucedplussyTVClient client;
 
     private Video mSelectedMovie;
 
@@ -101,7 +105,6 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        client = SaucedplussyTVClient.Companion.getInstance(requireContext());
         initializeBackground();
     }
 

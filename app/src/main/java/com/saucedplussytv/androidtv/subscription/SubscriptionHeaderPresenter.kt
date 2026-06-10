@@ -14,6 +14,12 @@ import com.bumptech.glide.request.RequestOptions
 import com.saucedplussytv.androidtv.R
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient
 
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface SubscriptionClientEntryPoint {
+    fun client(): SaucedplussyTVClient
+}
+
 class SubscriptionHeaderPresenter : RowHeaderPresenter() {
 
     private var client: SaucedplussyTVClient? = null
@@ -21,7 +27,10 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         if (client == null) {
-            client = SaucedplussyTVClient.getInstance(parent.context)
+            client = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                parent.context.applicationContext,
+                SubscriptionClientEntryPoint::class.java
+            ).client()
         }
 
         return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.header_subscription, parent, false))
