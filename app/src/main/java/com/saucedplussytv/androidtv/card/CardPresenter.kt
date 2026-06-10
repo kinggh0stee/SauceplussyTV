@@ -174,6 +174,7 @@ class CardPresenter(private var videoProgress: List<VideoProgress>) : Presenter(
                     video.tags.forEach { tag ->
                         (LayoutInflater.from(rootView.context)
                             .inflate(R.layout.view_tag, tagList, false) as TextView).apply {
+                            @Suppress("SetTextI18n")
                             text = "#$tag"
                             backgroundTintList = ColorStateList.valueOf(rootView.context.getTagColor(tag))
                             tagList.addView(this)

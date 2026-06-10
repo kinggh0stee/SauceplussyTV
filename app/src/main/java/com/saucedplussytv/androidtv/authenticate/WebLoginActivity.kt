@@ -1,8 +1,8 @@
 package com.saucedplussytv.androidtv.authenticate
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import androidx.core.net.toUri
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
@@ -52,6 +52,7 @@ class WebLoginActivity : ComponentActivity() {
     /** Last URL seen by doUpdateVisitedHistory; more reliable than webView.url after pushState. */
     private var lastNavigatedUrl: String? = null
 
+    @android.annotation.SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_web_login)
@@ -221,7 +222,7 @@ class WebLoginActivity : ComponentActivity() {
      */
     private fun maybeFinish(url: String?, retryCount: Int = 0) {
         if (completed || url == null || isFinishing || isDestroyed) return
-        val uri = Uri.parse(url)
+        val uri = url.toUri()
         val host = uri.host ?: return
         if (host != HOST && host != "www.$HOST") return
         if (!isAppRoute(uri.path)) return
