@@ -64,7 +64,9 @@
 - **MVVM/MVI:** Current architecture is mixed; formalize with ViewModels
 - **Repository pattern:** Separate data layer from UI
 - ~~**Dependency Injection — Pass 1:** Hilt 2.59.2 wired; `@Inject constructor` + `@Singleton` on all three client classes; `AppModule` + `SaucedplussyTVApp`; builds clean~~
-- **Dependency Injection — Pass 2:** Add `@AndroidEntryPoint` to all Activities/Fragments; replace `getInstance()` call sites with `@Inject` fields; wire `SubscriptionHeaderPresenter` via `@EntryPoint`; delete companions
+- ~~**Dependency Injection — Pass 2:** `@AndroidEntryPoint` on all Activities/Fragments; `@Inject` fields replace all `getInstance()` call sites; `SubscriptionHeaderPresenter` via `@EntryPoint`; companions deleted~~
+- **MVVM/MVI:** `VideoDetailsViewModel` done (resolution picker extracted, `Event<T>` single-shot LiveData, in-flight guard); `MainFragment` (~1000-line god class) is next and highest-value target
+- **Repository pattern:** Separate data layer from UI
 - **Navigation Component:** Replace manual intent navigation (high friction with Leanback — evaluate before starting)
 
 ### Out of scope (unofficial TV client)
@@ -111,3 +113,5 @@
 - [x] `getActivity()` null-safety — all async callbacks in MainFragment + VideoDetailsFragment
 - [x] Deprecation cleanup — 80 warnings fixed; 8 non-deprecation lint hints remain (layout/perf)
 - [x] Hilt DI Pass 1 — `@HiltAndroidApp`, `di/AppModule`, `@Inject constructor` + `@Singleton` on SaucedplussyTVClient / SocketClient / RequestTask; `kotlin-metadata-jvm:2.4.0` forced for Kotlin 2.4.0 compat; KSP 2.3.9
+- [x] Hilt DI Pass 2 — `@AndroidEntryPoint` on all Activities/Fragments; `@Inject` fields replace all `getInstance()` call sites; `SubscriptionHeaderPresenter` wired via `@EntryPoint`; all `getInstance()` companions deleted
+- [x] VideoDetailsViewModel — MVVM proof-of-concept: resolution picker data chain extracted from `VideoDetailsFragment`; `Event<T>` wrapper for single-shot LiveData (no spurious dialog replay on recreation); in-flight guard against duplicate loads; `fetchVideoUrl` error routing via `_dataError`
