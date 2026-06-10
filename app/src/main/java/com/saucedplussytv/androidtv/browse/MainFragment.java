@@ -3,6 +3,7 @@ package com.saucedplussytv.androidtv.browse;
 import static android.app.Activity.RESULT_OK;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
@@ -88,6 +89,9 @@ public class MainFragment extends BrowseSupportFragment {
     private int rowSelected;
     private int colSelected;
 
+    // TODO(tech-debt): Consider migrating liveHandler to lifecycle-aware coroutines (LiveCheckManager.kt).
+    // Current Handler is safe: removeCallbacksAndMessages(null) is called in both onDestroyView()
+    // and doLogout(), covering all detach paths. No leak has been observed.
     private final Handler liveHandler = new Handler(Looper.getMainLooper());
     private int liveIndex = -1;
     private boolean backgroundManagerPrepared = false;
@@ -204,7 +208,9 @@ public class MainFragment extends BrowseSupportFragment {
         }, () -> {
             dLog("LOGIN", "No stored session; starting login flow.");
             isLoggedIn = false;
-            Intent intent = new Intent(getActivity(), com.saucedplussytv.androidtv.authenticate.WebLoginActivity.class);
+            Activity activity = getActivity();
+            if (activity == null || !isAdded()) return Unit.INSTANCE;
+            Intent intent = new Intent(activity, com.saucedplussytv.androidtv.authenticate.WebLoginActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
             loginLauncher.launch(intent);
             return Unit.INSTANCE;
@@ -846,45 +852,54 @@ public class MainFragment extends BrowseSupportFragment {
 
     private Unit onVideoSelected(@Nullable Presenter.ViewHolder itemViewHolder, @NonNull Video video) {
         if (itemViewHolder != null) {
+            Activity activity = getActivity();
+            if (activity == null || !isAdded()) return Unit.INSTANCE;
+
             // Get intent to switch to DetailActivity ready
-            Intent intent = new Intent(getActivity(), DetailsActivity.class);
+            Intent intent = new Intent(activity, DetailsActivity.class);
 
             // Setup transition animation to detail screen
             ActivityOptionsCompat activityOptions = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                            requireActivity(),
+                            activity,
                             itemViewHolder.view.findViewById(R.id.image),
                             DetailsActivity.SHARED_ELEMENT_NAME);
 
             if ("live".equalsIgnoreCase(video.getType())) {
                 intent.putExtra(DetailsActivity.Video, video);
-                requireActivity().startActivity(intent, activityOptions.toBundle());
+                activity.startActivity(intent, activityOptions.toBundle());
             } else {
                 // getVideoId() returns attachmentOrder[0] from the list response, which may be
                 // absent or may contain a non-video attachment ID. getPost gives us the canonical
                 // videoAttachments[0].guid that /api/v3/content/video and /api/v3/delivery/info
                 // actually require — the same lookup VideoDetailsFragment.ACTION_RES already uses.
                 client.getPost(video.getGuid(), post -> {
+                    Activity act = getActivity();
+                    if (act == null || !isAdded()) return Unit.INSTANCE;
                     if (post == null) {
-                        Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(act, "Could not load video", Toast.LENGTH_SHORT).show();
                         return Unit.INSTANCE;
                     }
                     List<VideoAttachments> attachments = post.getVideoAttachments();
                     if (attachments == null || attachments.isEmpty()) {
-                        Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(act, "Could not load video", Toast.LENGTH_SHORT).show();
                         return Unit.INSTANCE;
                     }
                     String videoId = attachments.get(0).getGuid();
                     // Patch so getVideo's entityId param is also correct
                     video.setAttachmentIds(new String[]{ videoId });
                     client.getVideoInfo(videoId, videoInfo -> {
+                        Activity act2 = getActivity();
+                        if (act2 == null || !isAdded()) return Unit.INSTANCE;
                         if (videoInfo == null) {
-                            Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(act2, "Could not load video", Toast.LENGTH_SHORT).show();
                             return Unit.INSTANCE;
                         }
                         String res = getHighestSupportedRes(videoInfo);
                         client.getVideo(video, res, newVideo -> {
+                            Activity act3 = getActivity();
+                            if (act3 == null || !isAdded()) return Unit.INSTANCE;
                             if (newVideo.getVidUrl() == null || newVideo.getVidUrl().isEmpty()) {
-                                Toast.makeText(getActivity(), "Video URL unavailable", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(act3, "Video URL unavailable", Toast.LENGTH_SHORT).show();
                                 return Unit.INSTANCE;
                             }
                             newVideo.setVideoInfo(videoInfo);
@@ -961,16 +976,18 @@ public class MainFragment extends BrowseSupportFragment {
         new AlertDialog.Builder(getContext())
                 .setTitle("Play livestream?")
                 .setItems(s, (dialog, which) -> {
+                    Activity activity = getActivity();
+                    if (activity == null || !isAdded()) return;
                     String stream = subscriptions.get(which).getStreamUrl();
                     if (stream != null) {
                         dLog("LIVE", stream);
                         Video live = new Video();
                         live.setVidUrl(stream);
-                        Intent intent = new Intent(getActivity(), PlaybackActivity.class);
+                        Intent intent = new Intent(activity, PlaybackActivity.class);
                         intent.putExtra(DetailsActivity.Video, live);
                         startActivity(intent);
                     } else {
-                        Toast.makeText(getActivity(), "Subscription does not include access to livestream.", Toast.LENGTH_LONG).show();
+                        Toast.makeText(activity, "Subscription does not include access to livestream.", Toast.LENGTH_LONG).show();
                     }
                 })
                 .create()
