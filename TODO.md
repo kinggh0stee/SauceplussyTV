@@ -20,11 +20,11 @@
 
 ### Build & Tooling
 - ~~**CompileSdk:** done (37)~~
-- **Add unit tests:** Currently none exist
+- ~~**Add unit tests:** done — `VideoDetailsViewModelTest` (9 tests) + `MainViewModelTest` (6 tests); JVM-only with synchronous fakes; `testImplementation` deps + `returnDefaultValues = true`~~
 - ~~**CI/CD:** GitHub Actions for automated builds~~
 
 ### Code Quality
-- ~~**Coroutine adoption:** done — AuthManager writes are fire-and-forget `scope.launch`; WebLoginActivity polling migrated; no raw Threads remain~~
+- ~~**Coroutine adoption:** done — AuthManager writes are fire-and-forget `scope.launch`; WebLoginActivity polling migrated; `liveHandler` (last raw Handler) replaced with `launchDelayed` / `viewLifecycleOwner.lifecycleScope`; no raw Threads or Handlers remain~~
 - ~~**SharedPreferences → DataStore:** done — AuthManager fully migrated; zero SharedPreferences usages remain~~
 - ~~**Remove deprecated APIs:** partially done (deprecated imports + mipmap-anydpi-v26 removed); see Deprecation cleanup above~~
 
@@ -64,8 +64,8 @@
 - ~~**Dependency Injection — Pass 1:** Hilt 2.59.2 wired; `@Inject constructor` + `@Singleton` on all three client classes; `AppModule` + `SaucedplussyTVApp`; builds clean~~
 - ~~**Dependency Injection — Pass 2:** `@AndroidEntryPoint` on all Activities/Fragments; `@Inject` fields replace all `getInstance()` call sites; `SubscriptionHeaderPresenter` via `@EntryPoint`; companions deleted~~
 - ~~**MVVM — ViewModels:** `VideoDetailsViewModel` + `MainViewModel` complete; all data/network/lifecycle state extracted from Fragments; `Event<T>` single-shot LiveData; fully private VM fields; `MainFragment` 1032→821 lines~~
-- **Repository pattern:** Decouple data layer from ViewModels — `SaucedplussyTVClient` is currently called directly from VMs; a `VideoRepository` / `SubscriptionRepository` layer would make VMs testable without mocking HTTP
-- **`liveHandler` → coroutines:** `MainFragment`'s Handler/Runnable live-check loop is the last raw Handler in the codebase; candidate for a `viewLifecycleOwner.lifecycleScope` job
+- ~~**Repository pattern:** done — `VideoRepository` + `SubscriptionRepository` interfaces; `SaucedplussyVideoRepository` / `SaucedplussySubscriptionRepository` delegates; `RepositoryModule` Hilt `@Binds`; ViewModels inject interfaces~~
+- ~~**`liveHandler` → coroutines:** done — `Handler(Looper.getMainLooper())` removed; post-login delay uses `launchDelayed()` (`MainFragmentExt.kt`); dead `setupLiveCheck`/`addLiveToRow` polling deleted (live detection via socket `CONTENT_LIVESTREAM_START` event)~~
 - **Navigation Component:** Replace manual `Intent` navigation (high friction with Leanback — evaluate before starting)
 
 ### Out of scope (unofficial TV client)
@@ -116,3 +116,6 @@
 - [x] VideoDetailsViewModel — MVVM proof-of-concept: resolution picker data chain extracted from `VideoDetailsFragment`; `Event<T>` wrapper for single-shot LiveData (no spurious dialog replay on recreation); in-flight guard against duplicate loads; `fetchVideoUrl` error routing via `_dataError`
 - [x] MainViewModel — all data fields (`subscriptions`, `videos`, `strms`, `videoProgress`, `creatorPages`, `creatorNames`, etc.) + subscription loading + pagination + progress fetch + logout clearing moved from `MainFragment`; `subCount`/`fetchProgressAsync` trigger consolidated in VM; `loadGeneration` guard on `checkLive` inner callback; `MainFragment` reduced from 1032 → 821 lines
 - [x] MainViewModel debt cleanup — all `@JvmField var` fields made `private`; `adapterInitialized` reverse-coupling eliminated (replaced with VM-owned `initialBatchComplete`); `needsInitRows` removed from `CreatorVideos`; `initialize()` method encapsulates retry reset; `fetchProgressAsync()` made private
+- [x] Repository pattern — `VideoRepository` + `SubscriptionRepository` interfaces with Volley threading KDoc; `SaucedplussyVideoRepository` / `SaucedplussySubscriptionRepository` delegate implementations; `RepositoryModule` Hilt `@Binds @Singleton`; both ViewModels inject interfaces instead of `SaucedplussyTVClient` directly
+- [x] Unit tests — first JVM test suite: `FakeVideoRepository` + `FakeSubscriptionRepository` synchronous fakes; `VideoDetailsViewModelTest` (9 tests) + `MainViewModelTest` (6 tests); `InstantTaskExecutorRule`; `testOptions.returnDefaultValues = true`; all 15 tests green
+- [x] `liveHandler` → coroutines — `Handler(Looper.getMainLooper())` removed from `MainFragment`; post-login 1500ms delay migrated to `launchDelayed()` in `MainFragmentExt.kt` (view-lifecycle scope); dead `setupLiveCheck()`/`addLiveToRow()` polling deleted (live detection handled by socket `CONTENT_LIVESTREAM_START`); no raw `Handler` or `Looper` remains in the browse package
