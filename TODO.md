@@ -65,7 +65,7 @@
 - **Repository pattern:** Separate data layer from UI
 - ~~**Dependency Injection — Pass 1:** Hilt 2.59.2 wired; `@Inject constructor` + `@Singleton` on all three client classes; `AppModule` + `SaucedplussyTVApp`; builds clean~~
 - ~~**Dependency Injection — Pass 2:** `@AndroidEntryPoint` on all Activities/Fragments; `@Inject` fields replace all `getInstance()` call sites; `SubscriptionHeaderPresenter` via `@EntryPoint`; companions deleted~~
-- **MVVM/MVI:** `VideoDetailsViewModel` done (resolution picker extracted, `Event<T>` single-shot LiveData, in-flight guard); `MainFragment` (~1000-line god class) is next and highest-value target
+- **MVVM/MVI:** `VideoDetailsViewModel` + `MainViewModel` done — all data fields, subscription loading, pagination, progress, and logout clearing moved; `MainFragment` reduced 1032→821 lines; Pass 2 cleanup to tighten `@JvmField var` public fields and `adapterInitialized` reverse-coupling
 - **Repository pattern:** Separate data layer from UI
 - **Navigation Component:** Replace manual intent navigation (high friction with Leanback — evaluate before starting)
 
@@ -115,3 +115,4 @@
 - [x] Hilt DI Pass 1 — `@HiltAndroidApp`, `di/AppModule`, `@Inject constructor` + `@Singleton` on SaucedplussyTVClient / SocketClient / RequestTask; `kotlin-metadata-jvm:2.4.0` forced for Kotlin 2.4.0 compat; KSP 2.3.9
 - [x] Hilt DI Pass 2 — `@AndroidEntryPoint` on all Activities/Fragments; `@Inject` fields replace all `getInstance()` call sites; `SubscriptionHeaderPresenter` wired via `@EntryPoint`; all `getInstance()` companions deleted
 - [x] VideoDetailsViewModel — MVVM proof-of-concept: resolution picker data chain extracted from `VideoDetailsFragment`; `Event<T>` wrapper for single-shot LiveData (no spurious dialog replay on recreation); in-flight guard against duplicate loads; `fetchVideoUrl` error routing via `_dataError`
+- [x] MainViewModel — all data fields (`subscriptions`, `videos`, `strms`, `videoProgress`, `creatorPages`, `creatorNames`, etc.) + subscription loading + pagination + progress fetch + logout clearing moved from `MainFragment`; `subCount`/`fetchProgressAsync` trigger consolidated in VM; `loadGeneration` guard on `checkLive` inner callback; `MainFragment` reduced from 1032 → 821 lines
