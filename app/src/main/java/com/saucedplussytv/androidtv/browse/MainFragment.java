@@ -617,42 +617,8 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void onGridNearEnd() {
-        if (mainViewModel.paginationInFlight || !isLoggedIn || mainViewModel.getSubscriptions().isEmpty()) return;
-
-        // Pre-count creators to fetch so we can clear paginationInFlight only after all return.
-        int dispatchCount = 0;
-        for (Subscription sub : mainViewModel.getSubscriptions()) {
-            String creator = sub.getCreator();
-            if (creator != null && !Boolean.TRUE.equals(mainViewModel.getExhaustedCreators().get(creator))) {
-                dispatchCount++;
-            }
-        }
-        if (dispatchCount == 0) return;
-
-        mainViewModel.paginationInFlight = true;
-        final int gen = mainViewModel.loadGeneration;
-        final java.util.concurrent.atomic.AtomicInteger remaining =
-                new java.util.concurrent.atomic.AtomicInteger(dispatchCount);
-
-        for (Subscription sub : mainViewModel.getSubscriptions()) {
-            String creator = sub.getCreator();
-            if (creator == null || Boolean.TRUE.equals(mainViewModel.getExhaustedCreators().get(creator))) continue;
-            int nextPage = mainViewModel.getCreatorPages().getOrDefault(creator, 1) + 1;
-            client.getVideos(creator, nextPage, vids -> {
-                if (mainViewModel.loadGeneration != gen) {
-                    if (remaining.decrementAndGet() == 0) mainViewModel.paginationInFlight = false;
-                    return Unit.INSTANCE;
-                }
-                if (vids == null || vids.length == 0) {
-                    mainViewModel.getExhaustedCreators().put(creator, true);
-                } else {
-                    mainViewModel.getCreatorPages().put(creator, nextPage);
-                }
-                mainViewModel.gotVideos(creator, vids);
-                if (remaining.decrementAndGet() == 0) mainViewModel.paginationInFlight = false;
-                return Unit.INSTANCE;
-            });
-        }
+        if (!isLoggedIn) return;
+        mainViewModel.loadNextPage();
     }
 
     private void prepareBackgroundManager() {

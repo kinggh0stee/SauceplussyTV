@@ -205,6 +205,42 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // --- Pagination ---
+
+    fun loadNextPage() {
+        if (paginationInFlight || _subscriptions.isEmpty()) return
+
+        var dispatchCount = 0
+        for (sub in _subscriptions) {
+            val creator = sub.creator
+            if (creator != null && !(_exhaustedCreators[creator] == true)) dispatchCount++
+        }
+        if (dispatchCount == 0) return
+
+        paginationInFlight = true
+        val gen = loadGeneration
+        val remaining = java.util.concurrent.atomic.AtomicInteger(dispatchCount)
+
+        for (sub in _subscriptions) {
+            val creator = sub.creator ?: continue
+            if (_exhaustedCreators[creator] == true) continue
+            val nextPage = (_creatorPages[creator] ?: 1) + 1
+            client.getVideos(creator, nextPage) { vids ->
+                if (loadGeneration != gen) {
+                    if (remaining.decrementAndGet() == 0) paginationInFlight = false
+                    return@getVideos
+                }
+                if (vids == null || vids.isEmpty()) {
+                    _exhaustedCreators[creator] = true
+                } else {
+                    _creatorPages[creator] = nextPage
+                }
+                gotVideos(creator, vids)
+                if (remaining.decrementAndGet() == 0) paginationInFlight = false
+            }
+        }
+    }
+
     // --- Video progress ---
 
     fun fetchProgressAsync() {
