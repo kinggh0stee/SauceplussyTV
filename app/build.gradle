@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.devtools.ksp'
+apply plugin: 'com.google.dagger.hilt.android'
 
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
@@ -60,6 +62,14 @@ android {
     namespace = 'com.saucedplussytv.androidtv'
 }
 
+configurations.all {
+    resolutionStrategy {
+        // Hilt 2.59.2 bundles kotlin-metadata-jvm that only supports up to Kotlin metadata 2.3.0.
+        // Force the 2.4.0 release so Hilt's annotation processor can read Kotlin 2.4.0 class files.
+        force 'org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.0'
+    }
+}
+
 repositories {
     google()
     //jcenter()
@@ -114,5 +124,9 @@ dependencies {
 
     // Version Compare
     implementation("io.github.g00fy2:versioncompare:1.5.0")
+
+    // Hilt DI
+    implementation 'com.google.dagger:hilt-android:2.59.2'
+    ksp 'com.google.dagger:hilt-android-compiler:2.59.2'
 
 }

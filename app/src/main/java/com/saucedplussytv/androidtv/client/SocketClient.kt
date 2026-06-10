@@ -13,16 +13,20 @@ import com.saucedplussytv.androidtv.Constants
 import com.saucedplussytv.androidtv.authenticate.AuthManager
 import com.saucedplussytv.androidtv.browse.MainFragment
 import com.saucedplussytv.androidtv.post.Post
+import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.util.*
+import javax.inject.Inject
+import javax.inject.Singleton
 
-
-class SocketClient private constructor(private val context: Context) {
-
-    private val authManager: AuthManager = AuthManager.getInstance(context)
+@Singleton
+class SocketClient @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val authManager: AuthManager
+) {
 
      // Initialize the WebSocket connection, ensuring we use a fresh access token.
     fun initialize(onReady: (Socket?) -> Unit) {
@@ -105,7 +109,8 @@ class SocketClient private constructor(private val context: Context) {
         fun getInstance(context: Context): SocketClient {
             if (INSTANCE == null) {
                 synchronized(this) {
-                    INSTANCE = SocketClient(context.applicationContext)
+                    val appContext = context.applicationContext
+                    INSTANCE = SocketClient(appContext, AuthManager.getInstance(appContext))
                 }
             }
 
