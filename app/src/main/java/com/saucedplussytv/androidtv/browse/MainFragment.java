@@ -57,7 +57,6 @@ import com.saucedplussytv.androidtv.client.SyncEvent;
 import com.saucedplussytv.androidtv.client.UserSync;
 import com.saucedplussytv.androidtv.detail.DetailsActivity;
 import com.saucedplussytv.androidtv.ext.MapExtensionKt;
-import com.saucedplussytv.androidtv.models.Delivery;
 import com.saucedplussytv.androidtv.models.Thumbnail;
 import com.saucedplussytv.androidtv.models.Video;
 import com.saucedplussytv.androidtv.models.VideoInfo;
@@ -153,6 +152,44 @@ public class MainFragment extends BrowseSupportFragment {
 
         mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
+        mainViewModel.getSessionExpired().observe(getViewLifecycleOwner(), event -> {
+            if (event.getContentIfNotHandled() == null) return;
+            Activity a = getActivity();
+            if (a == null || !isAdded()) return;
+            new AlertDialog.Builder(a)
+                    .setTitle("Session Expired")
+                    .setMessage("Your SaucedplussyTV session has expired. Please log in again.")
+                    .setPositiveButton("Log in", (dialog, which) -> {
+                        dialog.dismiss();
+                        relinkSession();
+                    })
+                    .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                    .create()
+                    .show();
+        });
+
+        mainViewModel.getNoSubscriptions().observe(getViewLifecycleOwner(), event -> {
+            if (event.getContentIfNotHandled() == null) return;
+            Activity a = getActivity();
+            if (a == null || !isAdded()) return;
+            new AlertDialog.Builder(a)
+                    .setTitle("No Subscriptions Found")
+                    .setMessage("Must be subscribed to a creator to utilize this app -- see official SaucedplussyTV website.")
+                    .setPositiveButton("OK", (dialog, which) -> {
+                        dialog.dismiss();
+                        relinkSession();
+                    })
+                    .create()
+                    .show();
+        });
+
+        mainViewModel.setOnVideosReadyCallback((creatorGUID, vids) -> {
+            Activity a = getActivity();
+            if (a == null || !isAdded()) return Unit.INSTANCE;
+            gotVideos(creatorGUID, vids);
+            return Unit.INSTANCE;
+        });
+
         getMainFragmentRegistry().registerFragment(PageRow.class, new BrowseSupportFragment.FragmentFactory<BrowseGridFragment>() {
             @Override
             public BrowseGridFragment createFragment(Object rowObj) {
@@ -226,7 +263,7 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void initialize() {
         mainViewModel.subsRetryCount = 0;
-        refreshSubscriptions();
+        mainViewModel.refreshSubscriptions();
         prepareBackgroundManager();
         
         // Only setup UI elements and listeners once, before views are created
@@ -412,138 +449,6 @@ public class MainFragment extends BrowseSupportFragment {
 
         // Restart the web login flow instead of closing the app
         checkLogin();
-    }
-
-    private void gotLiveInfo(Subscription sub, Delivery live) {
-        // Guard against processing live info if we're logged out
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring live info update - user is logged out");
-            return;
-        }
-
-        if (live.getGroups() == null || live.getGroups().isEmpty()
-                || live.getGroups().get(0).getOrigins() == null || live.getGroups().get(0).getOrigins().isEmpty()
-                || live.getGroups().get(0).getVariants() == null || live.getGroups().get(0).getVariants().isEmpty()) {
-            dLog(TAG, "gotLiveInfo: incomplete delivery response, skipping");
-            return;
-        }
-        String l = live.getGroups().get(0).getOrigins().get(0).getUrl() + live.getGroups().get(0).getVariants().get(0).getUrl();
-        sub.setStreamUrl(l);
-        client.checkLive(l, (status) -> {
-            // Double-check we're still logged in when callback executes
-            if (!isLoggedIn) {
-                dLog(TAG, "Ignoring live status callback - user logged out during request");
-                return Unit.INSTANCE;
-            }
-            sub.setStreaming(status == 200);
-            dLog("LIVE STATUS", String.valueOf(status));
-            return Unit.INSTANCE;
-        });
-        dLog("LIVE", l);
-    }
-
-    private void refreshSubscriptions() {
-        final int gen = mainViewModel.loadGeneration;
-        client.getSubs(subscriptions -> {
-            if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
-            if (!isAdded() || getContext() == null) return Unit.INSTANCE;
-            if (subscriptions == null) {
-                // Retry a few times before showing the dialog — the session cookie can
-                // take several seconds to propagate to the backend after a fresh login.
-                if (mainViewModel.subsRetryCount < 3) {
-                    mainViewModel.subsRetryCount++;
-                    dLog(TAG, "getSubs returned null, retry " + mainViewModel.subsRetryCount + "/3 in 3s");
-                    liveHandler.postDelayed(() -> {
-                        if (mainViewModel.loadGeneration == gen && isLoggedIn && isAdded()) {
-                            refreshSubscriptions();
-                        }
-                    }, 3000);
-                    return Unit.INSTANCE;
-                }
-                mainViewModel.subsRetryCount = 0;
-                new AlertDialog.Builder(getContext())
-                        .setTitle("Session Expired")
-                        .setMessage("Your SaucedplussyTV session has expired. Please log in again.")
-                        .setPositiveButton("Log in",
-                                (dialog, which) -> {
-                                    dialog.dismiss();
-                                    relinkSession();
-                                })
-                        .setNegativeButton("Cancel",
-                                (dialog, which) -> dialog.dismiss())
-                        .create()
-                        .show();
-            } else {
-                mainViewModel.subsRetryCount = 0;
-                if (subscriptions.length == 0) {
-                    new AlertDialog.Builder(getContext())
-                            .setTitle("No Subscriptions Found")
-                            .setMessage("Must be subscribed to a creator to utilize this app -- see official SaucedplussyTV website.")
-                            .setPositiveButton("OK",
-                                    (dialog, which) -> {
-                                        dialog.dismiss();
-                                        relinkSession();
-                                    })
-                            .create()
-                            .show();
-                    return Unit.INSTANCE;
-                }
-                gotSubscriptions(subscriptions);
-            }
-
-            return Unit.INSTANCE;
-        });
-    }
-
-    private void gotSubscriptions(Subscription[] subs) {
-        if (!isAdded() || getActivity() == null) return;
-        // Guard against processing subscriptions if we're logged out
-        if (!isLoggedIn) {
-            dLog(TAG, "Ignoring subscription update - user is logged out");
-            return;
-        }
-        
-        List<Subscription> trimmed = new ArrayList<>();
-        for (Subscription sub : subs) {
-            if (!trimmed.isEmpty()) {
-                if (!containsSub(trimmed, sub)) {
-                    trimmed.add(sub);
-                }
-            } else {
-                trimmed.add(sub);
-            }
-        }
-        mainViewModel.getSubscriptions().clear();
-        mainViewModel.getSubscriptions().addAll(trimmed);
-        final int gen = mainViewModel.loadGeneration;
-        int pending = 0;
-        for (Subscription sub : mainViewModel.getSubscriptions()) {
-            if (sub.getCreator() != null) {
-                pending++;
-                client.getLive(sub, live -> {
-                    if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
-                    gotLiveInfo(sub, live);
-                    return Unit.INSTANCE;
-                });
-                client.getVideos(sub.getCreator(), 1, vids -> {
-                    if (mainViewModel.loadGeneration != gen) return Unit.INSTANCE;
-                    gotVideos(sub.getCreator(), vids);
-                    return Unit.INSTANCE;
-                });
-            }
-        }
-        mainViewModel.subCount = pending;
-        dLog("ROWS", trimmed.size() + "");
-    }
-
-    private boolean containsSub(List<Subscription> trimmed, Subscription sub) {
-        for (Subscription s : trimmed) {
-            if (s.getCreator() != null && s.getCreator().equals(sub.getCreator())) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void gotVideos(String creatorGUID, Video[] vids) {
@@ -931,7 +836,7 @@ public class MainFragment extends BrowseSupportFragment {
                 mainViewModel.paginationInFlight = false;
                 rowSelected = 0;
                 colSelected = 0;
-                refreshSubscriptions();
+                mainViewModel.refreshSubscriptions();
                 break;
             case LOGOUT:
                 logout();
