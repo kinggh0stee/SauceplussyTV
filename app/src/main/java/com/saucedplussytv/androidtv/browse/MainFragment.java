@@ -27,6 +27,7 @@ import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.PageRow;
 import androidx.leanback.widget.Presenter;
 import androidx.leanback.widget.PresenterSelector;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.google.gson.Gson;
 
@@ -118,6 +119,8 @@ public class MainFragment extends BrowseSupportFragment {
     private long nextRowId = 1;
     private int settingsRowIndex = -1;
 
+    private MainViewModel mainViewModel;
+
     private ActivityResultLauncher<Intent> loginLauncher;
     private ActivityResultLauncher<Intent> detailLauncher;
 
@@ -161,6 +164,8 @@ public class MainFragment extends BrowseSupportFragment {
     @Override
     public void onViewCreated(@NonNull android.view.View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+
+        mainViewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
         getMainFragmentRegistry().registerFragment(PageRow.class, new BrowseSupportFragment.FragmentFactory<BrowseGridFragment>() {
             @Override
