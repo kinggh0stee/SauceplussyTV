@@ -190,10 +190,6 @@ public class MainFragment extends BrowseSupportFragment {
             } else if (cv.getNeedsInitRows()) {
                 // Adapter not yet initialized — rebuild rows from current data
                 initRows();
-                if (mainViewModel.subCount == 0) {
-                    mainViewModel.subCount = mainViewModel.getSubscriptions().size();
-                    mainViewModel.fetchProgressAsync();
-                }
             } else {
                 // Adapter already exists — update browse grid and creator row
                 List<Video> allVideos = mainViewModel.getMergedVideos();
@@ -203,10 +199,6 @@ public class MainFragment extends BrowseSupportFragment {
                     pendingBrowseVideos = allVideos;
                 }
                 addOrUpdateSubRow(cv.getCreatorGUID());
-                if (mainViewModel.subCount == 0) {
-                    mainViewModel.subCount = mainViewModel.getSubscriptions().size();
-                    mainViewModel.fetchProgressAsync();
-                }
             }
         });
 
@@ -445,9 +437,6 @@ public class MainFragment extends BrowseSupportFragment {
             setAdapter(null);
         }
 
-        // Reset adapter initialization flag
-        mainViewModel.adapterInitialized = false;
-
         // Reset grid fragment state
         gridFragment = null;
         pendingBrowseVideos = null;
@@ -544,6 +533,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void setupLiveCheck() {
+        if (mainViewModel.getStrms().isEmpty()) return;
         if (liveIndex == -1) {
             liveIndex = mainViewModel.getStrms().firstKey();
         }

@@ -28,9 +28,9 @@ data class CreatorVideos(
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    val client: SaucedplussyTVClient,
-    val socketClient: SocketClient,
-    val authManager: AuthManager
+    private val client: SaucedplussyTVClient,
+    private val socketClient: SocketClient,
+    private val authManager: AuthManager
 ) : ViewModel() {
 
     // --- Data model fields (moved from MainFragment) ---
@@ -90,7 +90,6 @@ class MainViewModel @Inject constructor(
     fun getCreatorPages(): HashMap<String, Int> = _creatorPages
     fun getExhaustedCreators(): HashMap<String, Boolean> = _exhaustedCreators
     fun getCreatorNames(): HashMap<String, String> = _creatorNames
-    fun getStreams(): NavigableMap<Int, Video> = _strms
 
     // --- Subscription loading ---
 
@@ -157,7 +156,7 @@ class MainViewModel @Inject constructor(
         return false
     }
 
-    fun gotLiveInfo(sub: Subscription, live: Delivery) {
+    private fun gotLiveInfo(sub: Subscription, live: Delivery) {
         val groups = live.groups ?: return
         if (groups.isEmpty()) return
         val group = groups[0]
@@ -167,15 +166,16 @@ class MainViewModel @Inject constructor(
         if (variants.isEmpty()) return
         val l = origins[0].url + variants[0].url
         sub.streamUrl = l
+        val gen = loadGeneration
         client.checkLive(l) { status ->
+            if (loadGeneration != gen) return@checkLive
             sub.streaming = (status == 200)
         }
     }
 
     // --- Video model mutation (model half of gotVideos) ---
 
-    fun gotVideos(creatorGUID: String, vids: Array<Video>?) {
-        if (vids == null) return
+    fun gotVideos(creatorGUID: String, vids: Array<Video>) {
 
         // Extract creator name
         if (vids.isNotEmpty() && vids[0].creator != null
@@ -199,9 +199,13 @@ class MainViewModel @Inject constructor(
             _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = true, needsInitRows = false)))
         } else {
             subCount--
-            // needsInitRows = true means Fragment should call initRows() (not adapterInitialized yet)
             val needsInitRows = !adapterInitialized
             _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = false, needsInitRows = needsInitRows)))
+            // When the last subscription's initial videos arrive, fetch progress once.
+            // Runs on Volley's main-thread delivery — no race with the postValue above.
+            if (subCount <= 0) {
+                fetchProgressAsync()
+            }
         }
     }
 
@@ -230,7 +234,7 @@ class MainViewModel @Inject constructor(
                     if (remaining.decrementAndGet() == 0) paginationInFlight = false
                     return@getVideos
                 }
-                if (vids == null || vids.isEmpty()) {
+                if (vids.isEmpty()) {
                     _exhaustedCreators[creator] = true
                 } else {
                     _creatorPages[creator] = nextPage
