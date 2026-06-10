@@ -1,5 +1,6 @@
 package com.saucedplussytv.androidtv.detail;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -208,20 +209,20 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                 startActivity(intent);
             } else if (action.getId() == ACTION_RES) {
                 client.getPost(mSelectedMovie.getGuid(), post -> {
+                    Activity activity = getActivity();
+                    if (activity == null || !isAdded()) return Unit.INSTANCE;
                     if (post == null || post.getVideoAttachments() == null
                             || post.getVideoAttachments().isEmpty()) {
-                        if (getActivity() != null) {
-                            Toast.makeText(getActivity(), "Could not load video", Toast.LENGTH_SHORT).show();
-                        }
+                        Toast.makeText(activity, "Could not load video", Toast.LENGTH_SHORT).show();
                         return Unit.INSTANCE;
                     }
                     String guid = post.getVideoAttachments().get(0).getGuid();
                     if (!guid.isEmpty()) {
                         client.getVideoInfo(guid, videoInfo -> {
+                            Activity activity2 = getActivity();
+                            if (activity2 == null || !isAdded()) return Unit.INSTANCE;
                             if (videoInfo == null || videoInfo.getLevels() == null) {
-                                if (getActivity() != null) {
-                                    Toast.makeText(getActivity(), "Could not load video info", Toast.LENGTH_SHORT).show();
-                                }
+                                Toast.makeText(activity2, "Could not load video info", Toast.LENGTH_SHORT).show();
                                 return Unit.INSTANCE;
                             }
                             List<Level> levels = videoInfo.getLevels();
@@ -231,14 +232,16 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                             }
                             CharSequence[] res = resolutions.toArray(new CharSequence[resolutions.size()]);
 
-                            AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                            AlertDialog.Builder builder = new AlertDialog.Builder(activity2);
                             builder.setTitle("Resolutions");
                             builder.setItems(res, (dialog, which) -> {
                                         String res1 = resolutions.get(which);
 
                                         client.getVideo(mSelectedMovie, res1, newVideo -> {
+                                            Activity activity3 = getActivity();
+                                            if (activity3 == null || !isAdded()) return Unit.INSTANCE;
                                             mSelectedMovie.setVidUrl(newVideo.getVidUrl());
-                                            Intent intent = new Intent(getActivity(), PlaybackActivity.class);
+                                            Intent intent = new Intent(activity3, PlaybackActivity.class);
                                             intent.putExtra(DetailsActivity.Video, (Serializable) mSelectedMovie);
                                             startActivity(intent);
                                             return Unit.INSTANCE;
@@ -251,7 +254,9 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                     return Unit.INSTANCE;
                 });
             } else {
-                Toast.makeText(getActivity(), action.toString(), Toast.LENGTH_SHORT).show();
+                Activity activity = getActivity();
+                if (activity == null || !isAdded()) return;
+                Toast.makeText(activity, action.toString(), Toast.LENGTH_SHORT).show();
             }
         });
         mPresenterSelector.addClassPresenter(DetailsOverviewRow.class, detailsPresenter);
@@ -266,17 +271,19 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                 Row row) {
 
             if (item instanceof Video) {
+                Activity activity = getActivity();
+                if (activity == null || !isAdded()) return;
                 MainFragment.dLog(TAG, "Item: " + item.toString());
-                Intent intent = new Intent(getActivity(), DetailsActivity.class);
+                Intent intent = new Intent(activity, DetailsActivity.class);
                 intent.putExtra(getResources().getString(R.string.movie), (Serializable) mSelectedMovie);
 
                 Bundle bundle =
                         ActivityOptionsCompat.makeSceneTransitionAnimation(
-                                getActivity(),
+                                activity,
                                 itemViewHolder.view.findViewById(R.id.image),
                                 DetailsActivity.SHARED_ELEMENT_NAME)
                                 .toBundle();
-                getActivity().startActivity(intent, bundle);
+                activity.startActivity(intent, bundle);
             }
         }
     }
