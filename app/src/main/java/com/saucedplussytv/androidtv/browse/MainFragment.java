@@ -7,8 +7,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -38,6 +36,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import kotlinx.coroutines.Job;
 import com.saucedplussytv.androidtv.card.CardPresenter;
 
 import javax.inject.Inject;
@@ -85,11 +85,7 @@ public class MainFragment extends BrowseSupportFragment {
     private int rowSelected;
     private int colSelected;
 
-    // TODO(tech-debt): Consider migrating liveHandler to lifecycle-aware coroutines (LiveCheckManager.kt).
-    // Current Handler is safe: removeCallbacksAndMessages(null) is called in both onDestroyView()
-    // and doLogout(), covering all detach paths. No leak has been observed.
-    private final Handler liveHandler = new Handler(Looper.getMainLooper());
-    private int liveIndex = -1;
+    private Job liveCheckJob;
     private boolean backgroundManagerPrepared = false;
     private boolean uiInitialized = false;
     private boolean isLoggedIn = false;
@@ -121,9 +117,9 @@ public class MainFragment extends BrowseSupportFragment {
                         isLoggedIn = true;
                         // Brief delay: cf_clearance needs ~1s to propagate across CF's CDN
                         // before the app's native HTTP client can use it successfully.
-                        liveHandler.postDelayed(() -> {
+                        MainFragmentExtKt.launchDelayed(getViewLifecycleOwner(), 1500L, () -> {
                             if (isLoggedIn && isAdded()) initialize();
-                        }, 1500);
+                        });
                     } else {
                         dLog(TAG, "Login result missing session cookie; restarting login flow.");
                         checkLogin();
@@ -270,7 +266,10 @@ public class MainFragment extends BrowseSupportFragment {
 
     @Override
     public void onDestroyView() {
-        liveHandler.removeCallbacksAndMessages(null);
+        if (liveCheckJob != null) {
+            liveCheckJob.cancel(null);
+            liveCheckJob = null;
+        }
         gridFragment = null;
         if (socket != null) {
             socket.disconnect();
@@ -419,10 +418,12 @@ public class MainFragment extends BrowseSupportFragment {
         // Reset Fragment-owned UI/adapter state
         rowSelected = 0;
         colSelected = 0;
-        liveIndex = -1;
 
-        // Remove any pending live handler callbacks to prevent accessing cleared data
-        liveHandler.removeCallbacksAndMessages(null);
+        // Cancel any in-flight live-check coroutine
+        if (liveCheckJob != null) {
+            liveCheckJob.cancel(null);
+            liveCheckJob = null;
+        }
 
         // Disconnect socket if connected
         if (socket != null && socket.connected()) {
@@ -492,7 +493,7 @@ public class MainFragment extends BrowseSupportFragment {
         setAdapter(rowsAdapter);
         pendingBrowseVideos = allVideos;
 
-        liveHandler.post(() -> setSelectedPosition(rowSelected, false, null));
+        if (getView() != null) getView().post(() -> setSelectedPosition(rowSelected, false, null));
     }
 
     private void addOrUpdateSubRow(String creatorGUID) {
@@ -532,32 +533,12 @@ public class MainFragment extends BrowseSupportFragment {
 
     private void setupLiveCheck() {
         if (mainViewModel.getStrms().isEmpty()) return;
-        if (liveIndex == -1) {
-            liveIndex = mainViewModel.getStrms().firstKey();
-        }
-
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                final Video stream = mainViewModel.getStrms().get(liveIndex);
-
-                if (stream != null) {
-                    client.checkLive(stream.getVidUrl(), status -> {
-                        if (status == 200) {
-                            addLiveToRow(stream);
-                            liveHandler.removeCallbacks(this);
-                        } else {
-                            liveHandler.postDelayed(this, 10000);
-                        }
-                        Integer next = mainViewModel.getStrms().higherKey(liveIndex);
-                        liveIndex = (next != null) ? next : mainViewModel.getStrms().firstKey();
-
-                        return Unit.INSTANCE;
-                    });
-                }
-            }
-        };
-        liveHandler.post(runnable);
+        liveCheckJob = MainFragmentExtKt.startLiveCheckLoop(
+            getViewLifecycleOwner(),
+            mainViewModel.getStrms(),
+            client,
+            stream -> addLiveToRow(stream)
+        );
     }
 
     private void appendVideosToRows(String creatorGUID) {
