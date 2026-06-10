@@ -6,11 +6,11 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.saucedplussytv.androidtv.authenticate.AuthManager
-import com.saucedplussytv.androidtv.client.SaucedplussyTVClient
 import com.saucedplussytv.androidtv.client.SocketClient
 import com.saucedplussytv.androidtv.models.Delivery
 import com.saucedplussytv.androidtv.models.Video
 import com.saucedplussytv.androidtv.models.VideoProgress
+import com.saucedplussytv.androidtv.repository.SubscriptionRepository
 import com.saucedplussytv.androidtv.subscription.Subscription
 import com.saucedplussytv.androidtv.util.Event
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,7 +27,7 @@ data class CreatorVideos(
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val client: SaucedplussyTVClient,
+    private val repository: SubscriptionRepository,
     private val socketClient: SocketClient,
     private val authManager: AuthManager
 ) : ViewModel() {
@@ -100,7 +100,7 @@ class MainViewModel @Inject constructor(
 
     fun refreshSubscriptions() {
         val gen = loadGeneration
-        client.getSubs { subs ->
+        repository.getSubs { subs ->
             if (loadGeneration != gen) return@getSubs
             if (subs == null) {
                 if (subsRetryCount < 3) {
@@ -141,11 +141,11 @@ class MainViewModel @Inject constructor(
         for (sub in _subscriptions) {
             if (sub.creator != null) {
                 pending++
-                client.getLive(sub) { live ->
+                repository.getLive(sub) { live ->
                     if (loadGeneration != gen) return@getLive
                     gotLiveInfo(sub, live)
                 }
-                client.getVideos(sub.creator!!, 1) { vids ->
+                repository.getVideos(sub.creator!!, 1) { vids ->
                     if (loadGeneration != gen) return@getVideos
                     gotVideos(sub.creator!!, vids)
                 }
@@ -172,7 +172,7 @@ class MainViewModel @Inject constructor(
         val l = origins[0].url + variants[0].url
         sub.streamUrl = l
         val gen = loadGeneration
-        client.checkLive(l) { status ->
+        repository.checkLive(l) { status ->
             if (loadGeneration != gen) return@checkLive
             sub.streaming = (status == 200)
         }
@@ -232,7 +232,7 @@ class MainViewModel @Inject constructor(
             val creator = sub.creator ?: continue
             if (_exhaustedCreators[creator] == true) continue
             val nextPage = (_creatorPages[creator] ?: 1) + 1
-            client.getVideos(creator, nextPage) { vids ->
+            repository.getVideos(creator, nextPage) { vids ->
                 if (loadGeneration != gen) {
                     if (remaining.decrementAndGet() == 0) paginationInFlight = false
                     return@getVideos
@@ -252,7 +252,7 @@ class MainViewModel @Inject constructor(
 
     private fun fetchProgressAsync() {
         val ids = _videos.values.flatMap { it }.map { it.id }
-        client.getVideoProgress(ids) { progress ->
+        repository.getVideoProgress(ids) { progress ->
             _videoProgress.clear()
             _videoProgress.addAll(progress)
             _videoProgressUpdated.postValue(Unit)

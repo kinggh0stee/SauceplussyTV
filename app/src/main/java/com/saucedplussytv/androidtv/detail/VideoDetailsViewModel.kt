@@ -3,16 +3,16 @@ package com.saucedplussytv.androidtv.detail
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.saucedplussytv.androidtv.client.SaucedplussyTVClient
 import com.saucedplussytv.androidtv.models.Level
 import com.saucedplussytv.androidtv.models.Video
+import com.saucedplussytv.androidtv.repository.VideoRepository
 import com.saucedplussytv.androidtv.util.Event
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
 @HiltViewModel
 class VideoDetailsViewModel @Inject constructor(
-    private val client: SaucedplussyTVClient
+    private val repository: VideoRepository
 ) : ViewModel() {
 
     private val _levels = MutableLiveData<Event<List<Level>>>()
@@ -26,7 +26,7 @@ class VideoDetailsViewModel @Inject constructor(
     fun loadLevels(postGuid: String) {
         if (isLoadingLevels) return
         isLoadingLevels = true
-        client.getPost(postGuid) { post ->
+        repository.getPost(postGuid) { post ->
             val attachments = post?.videoAttachments
             if (attachments.isNullOrEmpty()) {
                 _dataError.postValue(Event("Could not load video"))
@@ -39,7 +39,7 @@ class VideoDetailsViewModel @Inject constructor(
                 isLoadingLevels = false
                 return@getPost
             }
-            client.getVideoInfo(videoGuid) { videoInfo ->
+            repository.getVideoInfo(videoGuid) { videoInfo ->
                 isLoadingLevels = false
                 val levelList = videoInfo?.levels
                 if (levelList == null) {
@@ -52,7 +52,7 @@ class VideoDetailsViewModel @Inject constructor(
     }
 
     fun fetchVideoUrl(video: Video, resolution: String, onReady: (Video) -> Unit) {
-        client.getVideo(video, resolution) { result ->
+        repository.getVideo(video, resolution) { result ->
             if (result.vidUrl.isNullOrEmpty()) {
                 _dataError.postValue(Event("Could not load video URL"))
             } else {
