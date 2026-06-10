@@ -28,8 +28,11 @@ data class CreatorVideos(
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repository: SubscriptionRepository,
-    private val socketClient: SocketClient,
-    private val authManager: AuthManager
+    // socketClient and authManager are injected for future use (socket sync, auth gating).
+    // They are currently unused in MainViewModel's own logic — the Fragment wires them
+    // directly. Nullable so that JVM unit tests can construct the VM without Android context.
+    private val socketClient: SocketClient?,
+    private val authManager: AuthManager?
 ) : ViewModel() {
 
     // --- Data model fields (moved from MainFragment) ---
@@ -60,7 +63,11 @@ class MainViewModel @Inject constructor(
     val creatorVideosUpdated: LiveData<Event<CreatorVideos>> = _creatorVideosUpdated
 
     // --- Retry handler (lives entirely in the ViewModel) ---
-    private val retryHandler = Handler(Looper.getMainLooper())
+    // Lazy so that Looper.getMainLooper() is not called at construction time; JVM unit tests
+    // that only exercise non-retry code paths never trigger this initializer.
+    // For retry-path tests either use Robolectric or call refreshSubscriptions() with
+    // subsRetryCount already at the limit so the postDelayed branch is never reached.
+    private val retryHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
     // --- Public getters ---
     fun getSubscriptions(): MutableList<Subscription> = _subscriptions
@@ -288,4 +295,5 @@ class MainViewModel @Inject constructor(
         super.onCleared()
         retryHandler.removeCallbacksAndMessages(null)
     }
+
 }
