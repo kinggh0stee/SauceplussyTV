@@ -2,20 +2,7 @@
 
 ## High Priority — Technical Debt
 
-- **`getActivity()` null-safety** — async callbacks call `getActivity()` without null guard;
-  can NPE on fragment detach. Fix by capturing activity once at top of callback and returning
-  early if null/not-added. Pattern already used in the same files at the lines noted.
-  - `MainFragment.java`: lines 182, 881, 899, 904, 912, 918, 988, 992
-  - `VideoDetailsFragment.java`: lines 84, 95, 241, 254, 270, 275, 279
-
-- **`liveHandler` Handler/Looper → coroutines** — `MainFragment.java` uses
-  `new Handler(Looper.getMainLooper())` for the live-check polling loop (10s repeat, line 95)
-  and UI scheduling (lines 122, 192, 348, 648, 681–698). Migrate to
-  `viewLifecycleOwner.lifecycleScope`. Note: this is Java code — consider extracting the loop
-  to a Kotlin helper rather than inline Java coroutine boilerplate.
-
-- **Deprecation cleanup** — ~90 lint warnings remain after compileSdk 37 bump; reassess and
-  address remaining deprecated API usages.
+~~All items resolved. ✓~~
 
 ## Medium Priority
 
@@ -115,8 +102,10 @@
 - [x] ZXing dependency removed (was unused since Keycloak rewrite)
 - [x] socket.io-client 1.0.1 → 2.1.2
 - [x] lifecycle 2.4.1 → 2.10.0 (livedata-ktx + viewmodel-ktx)
-- [x] OkHttp 4.12.0 → 5.3.2
+- [x] OkHttp 4.12.0 → 5.4.0
 - [x] Gson 2.11.0 → 2.14.0
 - [x] Glide 4.16.0 → 5.0.7
 - [x] prettytime 5.0.0.Final → 5.0.9.Final
 - [x] compileSdk 34 → 37
+- [x] `getActivity()` null-safety — all async callbacks in MainFragment + VideoDetailsFragment
+- [x] Deprecation cleanup — 80 warnings fixed; 8 non-deprecation lint hints remain (layout/perf)
