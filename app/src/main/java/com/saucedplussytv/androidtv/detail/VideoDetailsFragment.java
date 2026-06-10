@@ -17,6 +17,7 @@ import androidx.core.app.ActivityOptionsCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.IntentCompat;
 import androidx.leanback.app.DetailsSupportFragment;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.leanback.app.DetailsSupportFragmentBackgroundController;
 import androidx.leanback.widget.Action;
 import androidx.leanback.widget.ArrayObjectAdapter;
@@ -71,6 +72,8 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
     @Inject
     SaucedplussyTVClient client;
 
+    private VideoDetailsViewModel viewModel;
+
     private Video mSelectedMovie;
 
     private ArrayObjectAdapter mAdapter;
@@ -95,6 +98,12 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
             setupDetailsOverviewRow();
             setupDetailsOverviewRowPresenter();
             setAdapter(mAdapter);
+            viewModel = new ViewModelProvider(this).get(VideoDetailsViewModel.class);
+            viewModel.getLevels().observe(this, levels -> showResolutionDialog(levels));
+            viewModel.getDataError().observe(this, msg -> {
+                Activity a = getActivity();
+                if (a != null && isAdded()) Toast.makeText(a, msg, Toast.LENGTH_SHORT).show();
+            });
             setOnItemViewClickedListener(new ItemViewClickedListener());
         } else {
             Intent intent = new Intent(getActivity(), MainActivity.class);
@@ -211,51 +220,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                 intent.putExtra(DetailsActivity.Resume, true);
                 startActivity(intent);
             } else if (action.getId() == ACTION_RES) {
-                client.getPost(mSelectedMovie.getGuid(), post -> {
-                    Activity activity = getActivity();
-                    if (activity == null || !isAdded()) return Unit.INSTANCE;
-                    if (post == null || post.getVideoAttachments() == null
-                            || post.getVideoAttachments().isEmpty()) {
-                        Toast.makeText(activity, "Could not load video", Toast.LENGTH_SHORT).show();
-                        return Unit.INSTANCE;
-                    }
-                    String guid = post.getVideoAttachments().get(0).getGuid();
-                    if (!guid.isEmpty()) {
-                        client.getVideoInfo(guid, videoInfo -> {
-                            Activity activity2 = getActivity();
-                            if (activity2 == null || !isAdded()) return Unit.INSTANCE;
-                            if (videoInfo == null || videoInfo.getLevels() == null) {
-                                Toast.makeText(activity2, "Could not load video info", Toast.LENGTH_SHORT).show();
-                                return Unit.INSTANCE;
-                            }
-                            List<Level> levels = videoInfo.getLevels();
-                            List<String> resolutions = new ArrayList<>();
-                            for (Level l : levels) {
-                                resolutions.add(l.getName());
-                            }
-                            CharSequence[] res = resolutions.toArray(new CharSequence[resolutions.size()]);
-
-                            AlertDialog.Builder builder = new AlertDialog.Builder(activity2);
-                            builder.setTitle("Resolutions");
-                            builder.setItems(res, (dialog, which) -> {
-                                        String res1 = resolutions.get(which);
-
-                                        client.getVideo(mSelectedMovie, res1, newVideo -> {
-                                            Activity activity3 = getActivity();
-                                            if (activity3 == null || !isAdded()) return Unit.INSTANCE;
-                                            mSelectedMovie.setVidUrl(newVideo.getVidUrl());
-                                            Intent intent = new Intent(activity3, PlaybackActivity.class);
-                                            intent.putExtra(DetailsActivity.Video, (Serializable) mSelectedMovie);
-                                            startActivity(intent);
-                                            return Unit.INSTANCE;
-                                        });
-                                    });
-                            builder.create().show();
-                            return Unit.INSTANCE;
-                        });
-                    }
-                    return Unit.INSTANCE;
-                });
+                viewModel.loadLevels(mSelectedMovie.getGuid());
             } else {
                 Activity activity = getActivity();
                 if (activity == null || !isAdded()) return;
@@ -263,6 +228,31 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
             }
         });
         mPresenterSelector.addClassPresenter(DetailsOverviewRow.class, detailsPresenter);
+    }
+
+    private void showResolutionDialog(List<Level> levels) {
+        Activity activity = getActivity();
+        if (activity == null || !isAdded()) return;
+        List<String> resolutions = new ArrayList<>();
+        for (Level l : levels) {
+            resolutions.add(l.getName());
+        }
+        CharSequence[] res = resolutions.toArray(new CharSequence[0]);
+        new AlertDialog.Builder(activity)
+                .setTitle("Resolutions")
+                .setItems(res, (dialog, which) -> {
+                    String chosen = resolutions.get(which);
+                    viewModel.fetchVideoUrl(mSelectedMovie, chosen, newVideo -> {
+                        Activity a = getActivity();
+                        if (a == null || !isAdded()) return Unit.INSTANCE;
+                        mSelectedMovie.setVidUrl(newVideo.getVidUrl());
+                        Intent intent = new Intent(a, PlaybackActivity.class);
+                        intent.putExtra(DetailsActivity.Video, (Serializable) mSelectedMovie);
+                        a.startActivity(intent);
+                        return Unit.INSTANCE;
+                    });
+                })
+                .create().show();
     }
 
     private final class ItemViewClickedListener implements OnItemViewClickedListener {
