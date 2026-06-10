@@ -22,8 +22,7 @@ import javax.inject.Inject
 
 data class CreatorVideos(
     val creatorGUID: String,
-    val isPagination: Boolean,
-    val needsInitRows: Boolean
+    val isPagination: Boolean
 )
 
 @HiltViewModel
@@ -42,14 +41,13 @@ class MainViewModel @Inject constructor(
     private val _exhaustedCreators: HashMap<String, Boolean> = HashMap()
     private val _creatorNames: HashMap<String, String> = HashMap()
 
-    @JvmField var subCount: Int = 0
-    @JvmField var loadGeneration: Int = 0
-    @JvmField var subsRetryCount: Int = 0
-    @JvmField var paginationInFlight: Boolean = false
-
-    // adapterInitialized is read by gotVideos() to decide between init vs update path.
-    // Fragment still owns the adapter; ViewModel reads this flag via the setter below.
-    @JvmField var adapterInitialized: Boolean = false
+    private var subCount: Int = 0
+    private var loadGeneration: Int = 0
+    private var subsRetryCount: Int = 0
+    private var paginationInFlight: Boolean = false
+    // True once the initial subscription batch has fully loaded; used to distinguish
+    // initial-load from pagination calls inside gotVideos().
+    private var initialBatchComplete: Boolean = false
 
     // --- LiveData events ---
     private val _sessionExpired = MutableLiveData<Event<Unit>>()
@@ -90,6 +88,13 @@ class MainViewModel @Inject constructor(
     fun getCreatorPages(): HashMap<String, Int> = _creatorPages
     fun getExhaustedCreators(): HashMap<String, Boolean> = _exhaustedCreators
     fun getCreatorNames(): HashMap<String, String> = _creatorNames
+
+    // --- Entry point called by Fragment on login / refresh ---
+
+    fun initialize() {
+        subsRetryCount = 0
+        refreshSubscriptions()
+    }
 
     // --- Subscription loading ---
 
@@ -186,7 +191,7 @@ class MainViewModel @Inject constructor(
         }
 
         val existing = _videos[creatorGUID]
-        val isPagination = adapterInitialized && existing != null && existing.isNotEmpty()
+        val isPagination = initialBatchComplete && existing != null && existing.isNotEmpty()
 
         if (existing != null && existing.isNotEmpty()) {
             existing.addAll(vids.toList())
@@ -196,14 +201,12 @@ class MainViewModel @Inject constructor(
 
         if (isPagination) {
             paginationInFlight = false
-            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = true, needsInitRows = false)))
+            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = true)))
         } else {
             subCount--
-            val needsInitRows = !adapterInitialized
-            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = false, needsInitRows = needsInitRows)))
-            // When the last subscription's initial videos arrive, fetch progress once.
-            // Runs on Volley's main-thread delivery — no race with the postValue above.
+            _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = false)))
             if (subCount <= 0) {
+                initialBatchComplete = true
                 fetchProgressAsync()
             }
         }
@@ -247,7 +250,7 @@ class MainViewModel @Inject constructor(
 
     // --- Video progress ---
 
-    fun fetchProgressAsync() {
+    private fun fetchProgressAsync() {
         val ids = _videos.values.flatMap { it }.map { it.id }
         client.getVideoProgress(ids) { progress ->
             _videoProgress.clear()
@@ -278,7 +281,7 @@ class MainViewModel @Inject constructor(
         subCount = 0
         subsRetryCount = 0
         paginationInFlight = false
-        adapterInitialized = false
+        initialBatchComplete = false
     }
 
     override fun onCleared() {

@@ -187,11 +187,11 @@ public class MainFragment extends BrowseSupportFragment {
             if (a == null || !isAdded() || !isLoggedIn) return;
             if (cv.isPagination()) {
                 appendVideosToRows(cv.getCreatorGUID());
-            } else if (cv.getNeedsInitRows()) {
-                // Adapter not yet initialized — rebuild rows from current data
+            } else if (rowsAdapter == null) {
+                // Rows not yet built — initialize from the data accumulated so far
                 initRows();
             } else {
-                // Adapter already exists — update browse grid and creator row
+                // Rows exist — incremental update for this creator
                 List<Video> allVideos = mainViewModel.getMergedVideos();
                 if (gridFragment != null) {
                     gridFragment.replaceVideos(allVideos, mainViewModel.getVideoProgress());
@@ -281,8 +281,7 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void initialize() {
-        mainViewModel.subsRetryCount = 0;
-        mainViewModel.refreshSubscriptions();
+        mainViewModel.initialize();
         prepareBackgroundManager();
         
         // Only setup UI elements and listeners once, before views are created
@@ -491,7 +490,6 @@ public class MainFragment extends BrowseSupportFragment {
         rowsAdapter.add(new ListRow(new HeaderItem(nextRowId++, getString(R.string.settings)), settingsAdapter));
 
         setAdapter(rowsAdapter);
-        mainViewModel.adapterInitialized = true;
         pendingBrowseVideos = allVideos;
 
         liveHandler.post(() -> setSelectedPosition(rowSelected, false, null));
@@ -717,7 +715,7 @@ public class MainFragment extends BrowseSupportFragment {
                 pendingBrowseVideos = null;
                 rowSelected = 0;
                 colSelected = 0;
-                mainViewModel.refreshSubscriptions();
+                mainViewModel.initialize();
                 break;
             case LOGOUT:
                 logout();
