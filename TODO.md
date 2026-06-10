@@ -12,7 +12,7 @@
 - ~~**Glide:** done (5.0.7)~~
 - ~~**Gson:** done (2.14.0)~~
 - ~~**ZXing:** removed (QR features unused since Keycloak rewrite)~~
-- ~~**OkHttp:** done (5.3.2)~~
+- ~~**OkHttp:** done (5.4.0)~~
 - ~~**Volley:** done (1.2.1, no upstream release since 2021)~~
 - ~~**socket.io-client:** done (2.1.2)~~
 - ~~**lifecycle:** done (2.10.0)~~
@@ -63,8 +63,9 @@
 ### Architecture
 - **MVVM/MVI:** Current architecture is mixed; formalize with ViewModels
 - **Repository pattern:** Separate data layer from UI
-- **Dependency Injection:** Hilt/Koin adoption
-- **Navigation Component:** Replace manual intent navigation
+- ~~**Dependency Injection — Pass 1:** Hilt 2.59.2 wired; `@Inject constructor` + `@Singleton` on all three client classes; `AppModule` + `SaucedplussyTVApp`; builds clean~~
+- **Dependency Injection — Pass 2:** Add `@AndroidEntryPoint` to all Activities/Fragments; replace `getInstance()` call sites with `@Inject` fields; wire `SubscriptionHeaderPresenter` via `@EntryPoint`; delete companions
+- **Navigation Component:** Replace manual intent navigation (high friction with Leanback — evaluate before starting)
 
 ### Out of scope (unofficial TV client)
 - ❌ Subscription purchase / cancel / change plan
@@ -109,3 +110,4 @@
 - [x] compileSdk 34 → 37
 - [x] `getActivity()` null-safety — all async callbacks in MainFragment + VideoDetailsFragment
 - [x] Deprecation cleanup — 80 warnings fixed; 8 non-deprecation lint hints remain (layout/perf)
+- [x] Hilt DI Pass 1 — `@HiltAndroidApp`, `di/AppModule`, `@Inject constructor` + `@Singleton` on SaucedplussyTVClient / SocketClient / RequestTask; `kotlin-metadata-jvm:2.4.0` forced for Kotlin 2.4.0 compat; KSP 2.3.9

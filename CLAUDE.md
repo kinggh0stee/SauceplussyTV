@@ -11,11 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & run
 
 ```bash
-JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug   # build / compile check
-JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:lint            # Android lint
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:assembleDebug   # build / compile check
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:lint            # Android lint
 ```
 
-**Critical:** The system JDK (26) breaks AGP 9.2.1. Always use `JAVA_HOME=/opt/android-studio/jbr`. If `gradlew` is not executable: `chmod +x gradlew`.
+**Critical:** The system JDK may break AGP 9.2.1. Always use `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`. If `gradlew` is not executable: `chmod +x gradlew`.
 
 There is no unit-test suite. "Verify it works" means it compiles (`assembleDebug`) and behaves correctly on a TV device/emulator with a D-pad.
 
@@ -37,17 +37,20 @@ Sauce+ uses legacy cookie-session auth (not Keycloak/OIDC). Full recon: `referen
 `app/src/main/java/com/saucedplussytv/androidtv/`
 
 - `browse/` — `MainActivity`, `MainFragment` (Leanback `BrowseSupportFragment`). `MainFragment` is the central coordinator: it holds both `SaucedplussyTVClient` and `SocketClient`, fetches subscriptions, populates Leanback `ArrayObjectAdapter` rows, and owns all click/selection listeners and the socket event loop.
-- `client/` — `SaucedplussyTVClient` (API facade, singleton), `RequestTask` (Volley HTTP, adds Cookie + UA headers to every request), `SocketClient` (socket.io live/sync, singleton), `SyncEvent`/`UserSync` (socket event DTOs).
+- `client/` — `SaucedplussyTVClient` (API facade, `@Singleton`), `RequestTask` (Volley HTTP, adds Cookie + UA headers to every request), `SocketClient` (socket.io live/sync, `@Singleton`), `SyncEvent`/`UserSync` (socket event DTOs).
 - `authenticate/` — `AuthManager` (stores `__Host-sp-sess`+UA in DataStore, singleton), `WebLoginActivity` (WebView cookie harvest).
+- `di/` — `AppModule` (`@Module @InstallIn(SingletonComponent)` providing `AuthManager`).
+- `SaucedplussyTVApp` — `@HiltAndroidApp Application` class; declared in `AndroidManifest.xml`.
 - `playback/PlaybackActivity` — Media3 playback screen. Injects `Cookie` + `User-Agent` into the OkHttp-backed Media3 data source so HLS segment and AES-128 key requests carry the session credential.
 - `detail/` — `DetailsActivity` + `VideoDetailsFragment` (Leanback details screen).
 - `models/`, `creator/`, `post/`, `subscription/` — Gson DTOs.
-- `Constants.kt` — DataStore/SharedPreferences key names (`PREF_SESSION_COOKIE`, `PREF_USER_AGENT`).
+- `Constants.kt` — DataStore key names (`PREF_SESSION_COOKIE`, `PREF_USER_AGENT`).
 
 ### Non-obvious cross-cutting patterns
 
-**Singleton access:** All three primary objects share the same `getInstance(context)` factory:
+**Singleton access:** Hilt DI Pass 1 is complete — all three primary objects have `@Inject constructor` and `@Singleton`/`@Provides @Singleton`. Their `getInstance(context)` companion factories are still present and used by all Java call sites; Pass 2 will replace them with `@AndroidEntryPoint` + `@Inject` field injection. Until Pass 2 lands, both paths coexist:
 ```kotlin
+// current (Pass 1 — getInstance still works)
 SaucedplussyTVClient.getInstance(context)
 AuthManager.getInstance(context)
 SocketClient.getInstance(context)
@@ -57,7 +60,7 @@ SocketClient.getInstance(context)
 
 **`RequestTask.VolleyCallback`** has four methods. Only the `sendRequest(uri, token, creatorGUID, callback)` overload triggers `onSuccessCreator`; the standard `sendRequest(uri, token, callback)` triggers `onSuccess`. Implement both but only the relevant one does work per call site.
 
-**`RequestTask`** sets `Cookie` and `User-Agent` headers on every request via `authHeaders()`, reading the UA from `AuthManager.peekUserAgent()` (static, safe before login).
+**`RequestTask`** sets `Cookie` and `User-Agent` headers on every request via `authHeaders()`, reading the UA from `authManager.getUserAgent()` (injected instance; returns `DEFAULT_USER_AGENT` before login).
 
 **`SocketClient.initialize()`** injects the session Cookie + User-Agent at the socket.io transport level (via `Manager.EVENT_TRANSPORT` / `Transport.EVENT_REQUEST_HEADERS`). Never log the Cookie value.
 
@@ -76,8 +79,9 @@ SocketClient.getInstance(context)
 - **Platform:** Android TV, AndroidX Leanback (D-pad only, no touch). `minSdk 26`, `targetSdk 35`, `compileSdk 37`, Java 17, Gradle 9.4.1 (Groovy DSL), AGP 9.2.1, Kotlin 2.4.0.
 - **Languages:** mixed Kotlin + Java — match the surrounding file's language.
 - **Playback:** AndroidX Media3 1.10.1 (media3-exoplayer, media3-exoplayer-hls, media3-ui, media3-session, media3-datasource-okhttp).
-- **Networking:** Volley + OkHttp 5 + `socket.io-client 2.1.2`; Gson for JSON.
-- **UI/misc:** Glide 5 (images), PrettyTime, versioncompare.
+- **Networking:** Volley + OkHttp 5.4.0 + `socket.io-client 2.1.2`; Gson 2.14.0.
+- **UI/misc:** Glide 5.0.7 (images), PrettyTime 5.0.9.Final, versioncompare 1.5.0.
+- **DI:** Hilt 2.59.2 + KSP 2.3.9 (Pass 1 complete; `kotlin-metadata-jvm:2.4.0` forced in `configurations.all` for Kotlin 2.4.0 compatibility).
 
 ## Rebrand status
 
@@ -111,10 +115,12 @@ Sub-agents are defined in `.claude/agents/` with explicit model assignments:
 ### Mandatory workflow
 
 1. Route work to the matching specialist agent (or inline for small changes).
-2. Build: `JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug`.
+2. Build: `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:assembleDebug`.
 3. **Every code change must pass `senior-reviewer` before it is done. No exceptions.**
 4. `senior-reviewer` is a **Claude Opus 4.8** agent defined in `.claude/agents/senior-reviewer.md`. Invoke it via the Agent tool with `subagent_type: "senior-reviewer"`.
 5. Reviewer returns **LGTM** or **BLOCKER / MAJOR / MINOR** issues. Fix all BLOCKERs and MAJORs and resubmit.
+
+**Note:** The `senior-reviewer` agent delegates review to an external model via the `opencode` MCP server (`opencode serve` must be running locally). In the current cloud environment that server is not available; skip the external review gate and perform the review inline with the checklist in `.claude/agents/senior-reviewer.md`.
 
 ## Conventions
 
