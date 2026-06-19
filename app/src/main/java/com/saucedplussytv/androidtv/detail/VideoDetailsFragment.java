@@ -117,7 +117,16 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
 
     private void initializeBackground() {
         mDetailsBackground.enableParallax();
+        if (mSelectedMovie == null || mSelectedMovie.getCreator() == null) return;
         client.getCreatorById(mSelectedMovie.getCreator().getId(), creator -> {
+            if (!isAdded()) return Unit.INSTANCE;
+            // Creator may have no cover image (or the API omitted it) — skip the load
+            // rather than NPE on the path chain.
+            if (creator.getCoverImage() == null
+                    || creator.getCoverImage().getPath() == null
+                    || creator.getCoverImage().getPath().isEmpty()) {
+                return Unit.INSTANCE;
+            }
             Glide.with(requireActivity())
                     .asBitmap()
                     .load(new GlideUrl(creator.getCoverImage().getPath(), new LazyHeaders.Builder()
@@ -130,6 +139,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                     .into(new CustomTarget<Bitmap>() {
                         @Override
                         public void onResourceReady(@NonNull Bitmap resource, @Nullable Transition<? super Bitmap> transition) {
+                            if (!isAdded()) return;
                             mDetailsBackground.setCoverBitmap(resource);
                             mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
                         }
@@ -147,27 +157,34 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
         MainFragment.dLog(TAG, "doInBackground: " + mSelectedMovie.toString());
         final DetailsOverviewRow row = new DetailsOverviewRow(mSelectedMovie);
         row.setImageDrawable(ContextCompat.getDrawable(requireContext(), R.drawable.default_background));
-        Glide.with(requireActivity())
-                .load(new GlideUrl(mSelectedMovie.getThumbnail().getPath(), new LazyHeaders.Builder()
-                        .addHeader("User-Agent", userAgent)
-                        .build())
-                )
-                .centerCrop()
-                .transform(new RoundedCorners(48))
-                .error(R.drawable.default_background)
-                .into(new CustomTarget<Drawable>() {
+        // Thumbnail may be absent on some content; only load when a real path exists,
+        // otherwise the default_background set above stands in.
+        String thumbPath = (mSelectedMovie.getThumbnail() != null)
+                ? mSelectedMovie.getThumbnail().getPath() : null;
+        if (thumbPath != null && !thumbPath.isEmpty()) {
+            Glide.with(requireActivity())
+                    .load(new GlideUrl(thumbPath, new LazyHeaders.Builder()
+                            .addHeader("User-Agent", userAgent)
+                            .build())
+                    )
+                    .centerCrop()
+                    .transform(new RoundedCorners(48))
+                    .error(R.drawable.default_background)
+                    .into(new CustomTarget<Drawable>() {
 
-                    @Override
-                    public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                        row.setImageDrawable(resource);
-                        mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
-                    }
+                        @Override
+                        public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                            if (!isAdded()) return;
+                            row.setImageDrawable(resource);
+                            mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size());
+                        }
 
-                    @Override
-                    public void onLoadCleared(@Nullable Drawable placeholder) {
+                        @Override
+                        public void onLoadCleared(@Nullable Drawable placeholder) {
 
-                    }
-                });
+                        }
+                    });
+        }
 
         ArrayObjectAdapter actionAdapter = new ArrayObjectAdapter();
         boolean isLive =  mSelectedMovie.getType().equalsIgnoreCase("live");

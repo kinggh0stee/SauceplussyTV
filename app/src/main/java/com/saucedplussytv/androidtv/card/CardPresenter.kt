@@ -192,6 +192,9 @@ class CardPresenter(private var videoProgress: List<VideoProgress>) : Presenter(
             DateUtils.formatElapsedTime(durationSecs.toLong())
 
         fun unBind() {
+            // Cancel any in-flight Glide request bound to this recycled view so it
+            // doesn't keep the target alive or load into a reused card.
+            Glide.with(rootView.context).clear(image)
             image.setImageDrawable(null)
         }
     }
