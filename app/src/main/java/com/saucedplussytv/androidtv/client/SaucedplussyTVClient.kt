@@ -146,7 +146,7 @@ class SaucedplussyTVClient @Inject constructor(
                     }
                     val cdn = groups[0].origins[0].url
                     val maxRes = res.toIntOrNull() ?: Int.MAX_VALUE
-                    val variants = groups[0].variants
+                    val variants = (groups[0].variants ?: emptyList())
                         .filter { v ->
                             val vRes = v.name.substringBefore("-").toIntOrNull() ?: 0
                             vRes <= maxRes
@@ -205,7 +205,10 @@ class SaucedplussyTVClient @Inject constructor(
                 object : RequestTask.VolleyCallback {
                 override fun onSuccess(response: String) {
                     try {
-                        callback(gson.fromJson(response, Video::class.java))
+                        // Gson can return null for malformed JSON despite the non-null
+                        // callback type; guard so the caller never receives a null Video.
+                        val video = gson.fromJson(response, Video::class.java)
+                        if (video != null) callback(video)
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
@@ -281,7 +284,10 @@ class SaucedplussyTVClient @Inject constructor(
                 object : RequestTask.VolleyCallback {
 
                 override fun onSuccess(response: String) {
-                    callback(gson.fromJson(response, Delivery::class.java))
+                    // Gson (Java) can return null for malformed JSON despite the non-null
+                    // callback type; guard so we never pass a null Delivery downstream.
+                    val delivery = gson.fromJson(response, Delivery::class.java)
+                    if (delivery != null) callback(delivery)
                 }
 
                 override fun onResponseCode(response: Int) = Unit
