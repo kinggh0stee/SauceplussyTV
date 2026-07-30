@@ -107,7 +107,7 @@ dependencies {
     implementation('io.socket:socket.io-client:2.1.2') {
         // excluding org.json which is provided by Android
         exclude group: 'org.json', module: 'json'
-        // exclude socket.io-client's transitive okhttp; we supply 5.3.2 explicitly above
+        // exclude socket.io-client's transitive okhttp; we supply 5.4.0 explicitly above
         exclude group: 'com.squareup.okhttp3', module: 'okhttp'
     }
 

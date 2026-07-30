@@ -76,11 +76,14 @@ class MainViewModel @Inject constructor(
     fun getMergedVideos(): List<Video> {
         val all = mutableListOf<Video>()
         for (vids in _videos.values) {
-            if (vids != null) all.addAll(vids)
+            all.addAll(vids)
         }
         all.sortWith { a, b ->
-            val da = a.releaseDate ?: ""
-            val db = b.releaseDate ?: ""
+            // The elvis operators look redundant to the compiler because releaseDate is a
+            // non-null String, but Gson sets fields reflectively and can leave a null there
+            // when the API omits the key. Keep the guards.
+            @Suppress("USELESS_ELVIS") val da = a.releaseDate ?: ""
+            @Suppress("USELESS_ELVIS") val db = b.releaseDate ?: ""
             when {
                 da.isEmpty() && db.isEmpty() -> 0
                 da.isEmpty() -> 1
@@ -197,17 +200,25 @@ class MainViewModel @Inject constructor(
             if (name.isNotEmpty()) _creatorNames[creatorGUID] = name
         }
 
-        val existing = _videos[creatorGUID]
-        val isPagination = initialBatchComplete && existing != null && existing.isNotEmpty()
+        // Once the initial batch has landed, every getVideos response is a pagination
+        // response — loadNextPage() is the only caller. Keying off the existing list being
+        // non-empty was wrong for a creator whose first page came back empty: its later
+        // pages took the initial-load branch, driving subCount negative and re-firing
+        // fetchProgressAsync() on every page.
+        val isPagination = initialBatchComplete
 
-        if (existing != null && existing.isNotEmpty()) {
-            existing.addAll(vids.toList())
+        val existing = _videos[creatorGUID]
+        if (existing != null) {
+            // Offset paging can re-serve an item if new posts were published between
+            // requests; drop anything already held so rows don't show duplicates.
+            val seen = existing.mapTo(HashSet()) { it.guid }
+            // An item with a blank guid can't be identified, so it is always kept.
+            existing.addAll(vids.filter { it.guid.isEmpty() || seen.add(it.guid) })
         } else {
             _videos[creatorGUID] = ArrayList(vids.toList())
         }
 
         if (isPagination) {
-            paginationInFlight = false
             _creatorVideosUpdated.postValue(Event(CreatorVideos(creatorGUID, isPagination = true)))
         } else {
             subCount--

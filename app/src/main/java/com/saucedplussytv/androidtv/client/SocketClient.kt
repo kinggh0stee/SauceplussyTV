@@ -32,7 +32,7 @@ class SocketClient @Inject constructor(
     fun initialize(onReady: (Socket?) -> Unit) {
         // Gate on being logged in; the live Cookie/User-Agent are read at request time below.
         authManager.withValidAccessToken({ _ ->
-            val okHttpClient = OkHttpClient.Builder().build()
+            val okHttpClient = OK_HTTP_CLIENT
             IO.setDefaultOkHttpWebSocketFactory(okHttpClient)
             IO.setDefaultOkHttpCallFactory(okHttpClient)
 
@@ -102,5 +102,9 @@ class SocketClient @Inject constructor(
         private const val TAG = "SocketClient"
         private const val SITE = "https://www.sauceplus.com"
         private const val SOCKET_URI = SITE
+
+        // One client for the process: OkHttpClient owns connection and thread pools, so a
+        // new instance per initialize() call leaks those pools on every reconnect.
+        private val OK_HTTP_CLIENT: OkHttpClient by lazy { OkHttpClient.Builder().build() }
     }
 }

@@ -137,7 +137,11 @@ class AuthManager private constructor(private val context: Context) {
             }
         }
 
-        /** Reads the current User-Agent without blocking; safe before login (returns default). */
+        /**
+         * Reads the current User-Agent without blocking; safe before login (returns default).
+         * `@JvmStatic` so Java call sites (image loaders) can reach it as a static.
+         */
+        @JvmStatic
         fun peekUserAgent(): String = INSTANCE?.getUserAgent() ?: DEFAULT_USER_AGENT
     }
 }

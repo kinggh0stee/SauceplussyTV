@@ -12,6 +12,7 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import com.bumptech.glide.request.RequestOptions
 import com.saucedplussytv.androidtv.R
+import com.saucedplussytv.androidtv.authenticate.AuthManager
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient
 
 @dagger.hilt.EntryPoint
@@ -23,7 +24,6 @@ interface SubscriptionClientEntryPoint {
 class SubscriptionHeaderPresenter : RowHeaderPresenter() {
 
     private var client: SaucedplussyTVClient? = null
-    val version = com.saucedplussytv.androidtv.BuildConfig.VERSION_NAME
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         if (client == null) {
@@ -63,7 +63,7 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
                             .load(
                                 GlideUrl(
                                     logoPath, LazyHeaders.Builder()
-                                        .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
+                                        .addHeader("User-Agent", AuthManager.peekUserAgent())
                                         .build()
                                 )
                             )

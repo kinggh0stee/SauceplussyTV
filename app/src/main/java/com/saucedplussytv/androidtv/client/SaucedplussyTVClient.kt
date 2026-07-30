@@ -46,14 +46,25 @@ class SaucedplussyTVClient @Inject constructor(
                     MainFragment.dLog(TAG, "getSubs: $response")
                 }
 
-                if (response.contains("errors")) {
+                // A successful subscriptions response is always a JSON array. Anything else
+                // (an {"errors":[...]} envelope, or a Cloudflare/proxy HTML interstitial
+                // served with a 200) is a failure — treat it as such instead of feeding it
+                // to Gson, which would throw on the main thread.
+                if (!response.trimStart().startsWith("[")) {
+                    MainFragment.dError(TAG, "getSubs: unexpected non-array response")
                     callback(null)
                     return
                 }
 
-                gson.fromJson(response, Array<Subscription>::class.java).let { subs ->
-                    callback(subs)
+                // Volley delivers on the main thread, so an unguarded parse failure here
+                // crashes the app.
+                val subs = try {
+                    gson.fromJson(response, Array<Subscription>::class.java)
+                } catch (e: Exception) {
+                    MainFragment.dError(TAG, "getSubs: parse failed: ${e.javaClass.simpleName}")
+                    null
                 }
+                callback(subs)
             }
 
             override fun onSuccessCreator(response: String, creatorGUID: String) = Unit
@@ -114,7 +125,15 @@ class SaucedplussyTVClient @Inject constructor(
                         MainFragment.dLog(TAG, "getVideos: $response")
                     }
 
-                    callback(gson.fromJson(response, Array<Video>::class.java))
+                    // Guarded: Volley delivers on the main thread, and Gson can also return
+                    // null for malformed JSON despite the non-null callback type.
+                    val vids = try {
+                        gson.fromJson(response, Array<Video>::class.java)
+                    } catch (e: Exception) {
+                        MainFragment.dError(TAG, "getVideos: parse failed: ${e.javaClass.simpleName}")
+                        null
+                    }
+                    callback(vids ?: emptyArray())
                 }
 
                 override fun onError(error: VolleyError) = callback(emptyArray())
@@ -137,16 +156,22 @@ class SaucedplussyTVClient @Inject constructor(
                         MainFragment.dLog(TAG, "getVideo: $response")
                     }
 
-                    val delivery = gson.fromJson(response, Delivery::class.java)
-                    val groups = delivery?.groups
-                    if (groups.isNullOrEmpty() || groups[0].origins.isNullOrEmpty()) {
+                    val delivery = try {
+                        gson.fromJson(response, Delivery::class.java)
+                    } catch (e: Exception) {
+                        MainFragment.dError(TAG, "getVideo: parse failed: ${e.javaClass.simpleName}")
+                        null
+                    }
+                    val group = delivery?.groups?.firstOrNull()
+                    val origins = group?.origins
+                    if (origins.isNullOrEmpty()) {
                         MainFragment.dLog(TAG, "getVideo: no delivery groups or origins")
                         callback(video)
                         return
                     }
-                    val cdn = groups[0].origins[0].url
+                    val cdn = origins[0].url
                     val maxRes = res.toIntOrNull() ?: Int.MAX_VALUE
-                    val variants = (groups[0].variants ?: emptyList())
+                    val variants = (group.variants ?: emptyList())
                         .filter { v ->
                             val vRes = v.name.substringBefore("-").toIntOrNull() ?: 0
                             vRes <= maxRes
@@ -285,8 +310,14 @@ class SaucedplussyTVClient @Inject constructor(
 
                 override fun onSuccess(response: String) {
                     // Gson (Java) can return null for malformed JSON despite the non-null
-                    // callback type; guard so we never pass a null Delivery downstream.
-                    val delivery = gson.fromJson(response, Delivery::class.java)
+                    // callback type, and throws on a non-JSON body; guard both so we never
+                    // pass a null Delivery downstream or crash the main thread.
+                    val delivery = try {
+                        gson.fromJson(response, Delivery::class.java)
+                    } catch (e: Exception) {
+                        MainFragment.dError(TAG, "getLive: parse failed: ${e.javaClass.simpleName}")
+                        null
+                    }
                     if (delivery != null) callback(delivery)
                 }
 
@@ -320,7 +351,7 @@ class SaucedplussyTVClient @Inject constructor(
     }*/
 
     fun checkLive(streamUri: String, callback: (Int) -> Unit) {
-        requestTask.getReponseStatus(streamUri, object : RequestTask.VolleyCallback {
+        requestTask.getResponseStatus(streamUri, object : RequestTask.VolleyCallback {
             override fun onResponseCode(response: Int) {
                 callback(response)
             }
@@ -332,10 +363,6 @@ class SaucedplussyTVClient @Inject constructor(
             override fun onError(error: VolleyError) = Unit
 
         })
-    }
-
-    fun getCreatorByName(name: String, callback: (Creator) -> Unit) {
-        callback(creatorCache.values.firstOrNull { it.name == name } ?: Creator())
     }
 
     fun getCreatorTitle(id: String): String = creatorCache[id]?.name ?: ""

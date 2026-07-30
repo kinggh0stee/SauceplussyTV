@@ -17,7 +17,9 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:lint            # An
 
 **Critical:** The system JDK may break AGP 9.2.1. Always use `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`. If `gradlew` is not executable: `chmod +x gradlew`.
 
-There is no unit-test suite. "Verify it works" means it compiles (`assembleDebug`) and behaves correctly on a TV device/emulator with a D-pad.
+There is a small JVM-only unit-test suite (`./gradlew :app:testDebugUnitTest`) covering `MainViewModel` and `VideoDetailsViewModel` against fake repositories — no instrumentation tests. Everything UI-, playback-, or auth-related is still unverified by tests, so "verify it works" means it compiles (`assembleDebug`), the unit tests pass, and it behaves correctly on a TV device/emulator with a D-pad.
+
+The SDK is not preinstalled in every environment. If Gradle reports "SDK location not found", install the command-line tools and point `local.properties` at them (`sdk.dir=...`); this project needs `platforms;android-37.0` (note the `.0` — plain `android-37` does not exist) and `build-tools;37.0.0`.
 
 ## Auth model
 

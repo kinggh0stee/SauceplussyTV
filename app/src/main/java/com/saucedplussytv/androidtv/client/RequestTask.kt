@@ -29,19 +29,28 @@ class RequestTask @Inject constructor(
         return headers
     }
 
-    fun getReponseStatus(uri: String?, callback: VolleyCallback) {
-        var responseCode: Int = 0;
+    /**
+     * Probes [uri] and reports only its HTTP status. Used for the livestream up/down check.
+     *
+     * Sends the User-Agent but deliberately NOT the session Cookie: this targets a CDN host
+     * that authenticates via its own URL token, and the session cookie is the whole account
+     * credential — it should never be sent off the Sauce+ origin.
+     */
+    fun getResponseStatus(uri: String?, callback: VolleyCallback) {
+        var responseCode: Int = 0
         val stringRequest: StringRequest = object : StringRequest(Method.GET, uri,
             Response.Listener { _: String? ->
-                callback.onResponseCode(responseCode);
+                callback.onResponseCode(responseCode)
             }, Response.ErrorListener { error: VolleyError ->
-                //error.printStackTrace()
                 val status = error.networkResponse?.statusCode ?: 404
                 callback.onResponseCode(status)
             }) {
+            override fun getHeaders(): Map<String, String> =
+                mapOf("User-Agent" to authManager.getUserAgent())
+
             override fun parseNetworkResponse(response: NetworkResponse?): Response<String>? {
-                responseCode = response?.statusCode ?: 0;
-                return super.parseNetworkResponse(response);
+                responseCode = response?.statusCode ?: 0
+                return super.parseNetworkResponse(response)
             }
         }
         stringRequest.setShouldCache(false)

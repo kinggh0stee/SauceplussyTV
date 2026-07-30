@@ -30,9 +30,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!--
+        allowBackup is deliberately false: the DataStore file written by AuthManager holds
+        the full Sauce+ session credential (__Host-sp-sess + cf_clearance). Auto Backup
+        would copy that off-device into the user's Google account.
+    -->
     <application
         android:name=".SaucedplussyTVApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

@@ -33,9 +33,9 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ---- WebView JS bridge ----
+# WebLoginActivity.LoginBridge is called only from JavaScript, so R8 sees no callers and
+# would strip it — silently breaking the authoritative login-detection probe.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

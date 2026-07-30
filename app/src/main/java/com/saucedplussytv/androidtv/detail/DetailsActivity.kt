@@ -19,7 +19,13 @@ class DetailsActivity : AppCompatActivity() {
         setTheme(R.style.AppTheme_Video)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_details)
-        supportFragmentManager.beginTransaction().add(R.id.details_fragment, VideoDetailsFragment()).commit()
+        // See MainActivity: only add on a cold create, otherwise recreation stacks a
+        // second details fragment on top of the restored one.
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .add(R.id.details_fragment, VideoDetailsFragment())
+                .commit()
+        }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
