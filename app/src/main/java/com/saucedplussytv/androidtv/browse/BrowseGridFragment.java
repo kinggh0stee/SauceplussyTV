@@ -1,10 +1,12 @@
 package com.saucedplussytv.androidtv.browse;
 
 import android.os.Bundle;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.leanback.app.BrowseSupportFragment;
 import androidx.leanback.app.VerticalGridSupportFragment;
 import androidx.leanback.widget.ArrayObjectAdapter;
+import androidx.leanback.widget.DiffCallback;
 import androidx.leanback.widget.VerticalGridPresenter;
 import com.saucedplussytv.androidtv.card.CardPresenter;
 import com.saucedplussytv.androidtv.models.Video;
@@ -73,16 +75,33 @@ public class BrowseGridFragment extends VerticalGridSupportFragment
         }
     }
 
+    /**
+     * Identity is the video guid; contents are always reported changed so surviving items
+     * rebind with the latest watch progress. Keeping item identity across updates is what
+     * lets DiffUtil preserve the focused position — rebuilding the adapter snapped D-pad
+     * focus back to the first card every time a creator's videos arrived during load.
+     */
+    private static final DiffCallback<Video> VIDEO_DIFF = new DiffCallback<Video>() {
+        @Override
+        public boolean areItemsTheSame(@NonNull Video oldItem, @NonNull Video newItem) {
+            String oldGuid = oldItem.getGuid();
+            return oldGuid != null && !oldGuid.isEmpty() && oldGuid.equalsIgnoreCase(newItem.getGuid());
+        }
+
+        @Override
+        public boolean areContentsTheSame(@NonNull Video oldItem, @NonNull Video newItem) {
+            return false;
+        }
+    };
+
     void replaceVideos(List<Video> videos, List<VideoProgress> progress) {
         if (gridAdapter == null) {
             pendingVideos = new ArrayList<>(videos);
             pendingProgress = progress;
             return;
         }
-        cardPresenter = new CardPresenter(progress != null ? progress : new ArrayList<>());
-        gridAdapter = new ArrayObjectAdapter(cardPresenter);
-        for (Video v : videos) gridAdapter.add(v);
-        setAdapter(gridAdapter);
+        cardPresenter.updateProgress(progress != null ? progress : new ArrayList<>());
+        gridAdapter.setItems(videos, VIDEO_DIFF);
     }
 
     void appendUniqueVideos(List<Video> videos) {

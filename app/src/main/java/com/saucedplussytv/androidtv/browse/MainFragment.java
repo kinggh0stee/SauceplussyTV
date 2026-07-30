@@ -234,17 +234,10 @@ public class MainFragment extends BrowseSupportFragment {
             if (new Version(version).isLowerThan(v.substring(1))) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                 builder.setTitle("Update Available");
-                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/kinggh0stee/Sauce-AndroidTV/releases");
+                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/kinggh0stee/SauceplussyTV/releases");
                 builder.setPositiveButton("OKAY", null);
                 builder.create().show();
             }
-            /*if (!version.equalsIgnoreCase(v.substring(1))) {
-                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-                builder.setTitle("Update Available");
-                builder.setMessage("Version " + v + " now available via Github: \n\nhttps://github.com/kinggh0stee/Sauce-AndroidTV/releases");
-                builder.setPositiveButton("OKAY", null);
-                builder.create().show();
-            }*/
             return Unit.INSTANCE;
         });
     }
@@ -711,7 +704,9 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void showInfo() {
-        new AlertDialog.Builder(getContext())
+        Activity a = getActivity();
+        if (a == null || !isAdded()) return;
+        new AlertDialog.Builder(a)
                 .setTitle("SaucedplussyTV")
                 .setMessage("Version: " + version + "\n\n" +
                         "Unofficial client for Sauce+\n\n" +
@@ -725,6 +720,8 @@ public class MainFragment extends BrowseSupportFragment {
     }
 
     private void selectLivestream() {
+        Activity a = getActivity();
+        if (a == null || !isAdded()) return;
         List<String> subs = new ArrayList<>();
         for (Subscription s : mainViewModel.getSubscriptions()) {
             if (s.getPlan() != null) {
@@ -732,7 +729,7 @@ public class MainFragment extends BrowseSupportFragment {
             }
         }
         CharSequence[] s = subs.toArray(new CharSequence[0]);
-        new AlertDialog.Builder(getContext())
+        new AlertDialog.Builder(a)
                 .setTitle("Play livestream?")
                 .setItems(s, (dialog, which) -> {
                     Activity activity = getActivity();
