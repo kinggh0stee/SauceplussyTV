@@ -45,9 +45,11 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
 
         when {
             name == subView.context.getString(R.string.settings) -> {
+                iconView.tag = null
                 iconView.setImageResource(R.drawable.ic_settings)
             }
             name == subView.context.getString(R.string.browse) -> {
+                iconView.tag = null
                 iconView.setImageDrawable(null)
             }
             else -> {
@@ -56,9 +58,13 @@ class SubscriptionHeaderPresenter : RowHeaderPresenter() {
                 // icon is available, whether or not the cache was already warm.
                 val guid = (row.headerItem as? CreatorHeaderItem)?.creatorGUID ?: return
                 iconView.setImageDrawable(null)
+                // Header views are recycled; the tag records which creator this view is
+                // currently bound to so a slow fetch can't paint its icon onto a view
+                // that has since been rebound to a different row.
+                iconView.tag = guid
                 client?.getCreatorById(guid) { creator ->
                     val logoPath = creator.icon?.path
-                    if (!logoPath.isNullOrEmpty() && subView.isAttachedToWindow) {
+                    if (!logoPath.isNullOrEmpty() && subView.isAttachedToWindow && iconView.tag == guid) {
                         Glide.with(subView)
                             .load(
                                 GlideUrl(

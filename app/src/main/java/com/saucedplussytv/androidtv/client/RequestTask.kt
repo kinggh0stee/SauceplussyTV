@@ -89,6 +89,7 @@ class RequestTask @Inject constructor(
             override fun getHeaders(): Map<String, String> = authHeaders(accessToken)
         }
         stringRequest.setShouldCache(false)
+        stringRequest.retryPolicy = noRetryPolicy()
         volleyQueue.add(stringRequest)
     }
 
@@ -113,8 +114,14 @@ class RequestTask @Inject constructor(
                 Response.success(String(response?.data ?: ByteArray(0)), null)
         }
         jsonRequest.setShouldCache(false)
+        jsonRequest.retryPolicy = noRetryPolicy()
         volleyQueue.add(jsonRequest)
     }
+
+    // POSTs here are not idempotent — like/dislike are server-side toggles, so Volley's
+    // default policy retrying a timed-out-but-delivered request flips the state straight
+    // back. Fail once instead; every POST call site treats an error as a no-op.
+    private fun noRetryPolicy() = DefaultRetryPolicy(POST_TIMEOUT_MS, 0, 1f)
 
     fun sendRequest(uri: String?, accessToken: String, creatorGUID: String?, callback: VolleyCallback) {
         val stringRequest: StringRequest = object : StringRequest(
@@ -143,5 +150,9 @@ class RequestTask @Inject constructor(
     companion object {
 
         private const val ACCEPT_JSON = "application/json"
+
+        // Matches OkHttpStack's read timeout so Volley doesn't declare a timeout while
+        // OkHttp is still legitimately waiting on a slow Cloudflare-fronted response.
+        private const val POST_TIMEOUT_MS = 30_000
     }
 }
