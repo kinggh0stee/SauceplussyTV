@@ -43,6 +43,7 @@ import javax.inject.Inject;
 import dagger.hilt.android.AndroidEntryPoint;
 import kotlin.Unit;
 import com.saucedplussytv.androidtv.R;
+import com.saucedplussytv.androidtv.authenticate.AuthManager;
 import com.saucedplussytv.androidtv.browse.MainActivity;
 import com.saucedplussytv.androidtv.browse.MainFragment;
 import com.saucedplussytv.androidtv.client.SaucedplussyTVClient;
@@ -74,8 +75,11 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
 
     private DetailsSupportFragmentBackgroundController mDetailsBackground;
 
-    private static final String version = com.saucedplussytv.androidtv.BuildConfig.VERSION_NAME;
-    private static final String userAgent = String.format("SaucedplussyTV %s (AndroidTV)", version);
+    // Image hosts are not Cloudflare-gated today, but reusing the session User-Agent keeps
+    // every outbound request consistent with the one that solved the CF challenge.
+    private static String userAgent() {
+        return AuthManager.peekUserAgent();
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -130,7 +134,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
             Glide.with(requireActivity())
                     .asBitmap()
                     .load(new GlideUrl(creator.getCoverImage().getPath(), new LazyHeaders.Builder()
-                            .addHeader("User-Agent", userAgent)
+                            .addHeader("User-Agent", userAgent())
                             .build())
                         )
                     .override(1800, 519)
@@ -164,7 +168,7 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
         if (thumbPath != null && !thumbPath.isEmpty()) {
             Glide.with(requireActivity())
                     .load(new GlideUrl(thumbPath, new LazyHeaders.Builder()
-                            .addHeader("User-Agent", userAgent)
+                            .addHeader("User-Agent", userAgent())
                             .build())
                     )
                     .centerCrop()
@@ -283,7 +287,9 @@ public class VideoDetailsFragment extends DetailsSupportFragment {
                 if (activity == null || !isAdded()) return;
                 MainFragment.dLog(TAG, "Item: " + item.toString());
                 Intent intent = new Intent(activity, DetailsActivity.class);
-                intent.putExtra(getResources().getString(R.string.movie), (Serializable) mSelectedMovie);
+                // Open the video that was clicked, not the one already on screen. Also use
+                // the key DetailsActivity actually reads — R.string.movie is not that key.
+                intent.putExtra(DetailsActivity.Video, (Serializable) item);
 
                 Bundle bundle =
                         ActivityOptionsCompat.makeSceneTransitionAnimation(

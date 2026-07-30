@@ -15,6 +15,13 @@ class MainActivity : AppCompatActivity() {
         setTheme(R.style.AppTheme_Browse)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        supportFragmentManager.beginTransaction().add(R.id.main_browse_fragment, MainFragment()).commit()
+        // Only add on a cold create. On recreation (process death, config change) the
+        // FragmentManager restores the existing MainFragment; adding another would
+        // duplicate the browse UI and re-run the whole login/subscription load.
+        if (savedInstanceState == null) {
+            supportFragmentManager.beginTransaction()
+                .add(R.id.main_browse_fragment, MainFragment())
+                .commit()
+        }
     }
 }

@@ -121,6 +121,13 @@ public class MainFragment extends BrowseSupportFragment {
                         dLog(TAG, "Login result missing session cookie; restarting login flow.");
                         checkLogin();
                     }
+                } else {
+                    // Cancelled or failed login (back press, page load error). Without an offer
+                    // to retry the user is stranded on an empty browse screen with no way back
+                    // into the login flow short of restarting the app.
+                    dLog(TAG, "Login cancelled or failed; offering retry.");
+                    isLoggedIn = false;
+                    showLoginRetryDialog();
                 }
             }
         );
@@ -240,6 +247,26 @@ public class MainFragment extends BrowseSupportFragment {
             }*/
             return Unit.INSTANCE;
         });
+    }
+
+    /**
+     * Shown when WebLoginActivity returns without a session (user backed out, or the login
+     * page failed to load). Gives an explicit way back into the login flow; declining leaves
+     * the app logged out rather than closing it.
+     */
+    private void showLoginRetryDialog() {
+        Activity a = getActivity();
+        if (a == null || !isAdded()) return;
+        new AlertDialog.Builder(a)
+                .setTitle("Login Required")
+                .setMessage("SaucedplussyTV needs you to sign in to Sauce+ to load your subscriptions.")
+                .setPositiveButton("Try again", (dialog, which) -> {
+                    dialog.dismiss();
+                    checkLogin();
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                .create()
+                .show();
     }
 
     private void checkLogin() {

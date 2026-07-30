@@ -4,7 +4,6 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.text.TextUtils
 import android.text.format.DateUtils
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -22,6 +21,7 @@ import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.load.model.LazyHeaders
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.saucedplussytv.androidtv.R
+import com.saucedplussytv.androidtv.authenticate.AuthManager
 import com.saucedplussytv.androidtv.ext.getTagColor
 import com.saucedplussytv.androidtv.models.Video
 import com.saucedplussytv.androidtv.models.VideoProgress
@@ -53,8 +53,6 @@ class CardPresenter(private var videoProgress: List<VideoProgress>) : Presenter(
     }
 
     private class CardViewHolder(val rootView: View) {
-
-        val version = com.saucedplussytv.androidtv.BuildConfig.VERSION_NAME
 
         /**
          * Views
@@ -114,77 +112,80 @@ class CardPresenter(private var videoProgress: List<VideoProgress>) : Presenter(
         }
 
         fun setData(video: Video, videoProgress: VideoProgress?) {
-            if (video.thumbnail != null && video.thumbnail!!.childImages != null) {
-                title.text = video.title
+            // Every field is bound unconditionally. Cards are recycled, so gating the whole
+            // bind on the thumbnail being present left the previous video's title/description/
+            // tags on screen for any post that has no thumbnail.
+            title.text = video.title
 
-                video.description.parseAsHtml().let { videoDesc ->
-                    desc.text = videoDesc
+            video.description.parseAsHtml().let { videoDesc ->
+                desc.text = videoDesc
 
-                    if (videoDesc.isBlank()) {
-                        desc.isInvisible = true
-                        title.textSize = 20f
-                    } else {
-                        desc.isVisible = true
-                        title.textSize = 16f
-                    }
-                }
-
-                (if ((video.thumbnail?.childImages?.size ?: 0) > 0) {
-                    video.thumbnail?.childImages?.get(0)?.path
+                if (videoDesc.isBlank()) {
+                    desc.isInvisible = true
+                    title.textSize = 20f
                 } else {
-                    video.thumbnail?.path
-                })?.let { thumbnail ->
-                    Glide.with(rootView.context)
-                        //.load(thumbnail)
-                        .load(
-                            GlideUrl(
-                                thumbnail, LazyHeaders.Builder()
-                                    .addHeader("User-Agent", "SaucedplussyTV (AndroidTV $version)")
-                                    .build()
-                            )
+                    desc.isVisible = true
+                    title.textSize = 16f
+                }
+            }
+
+            val thumbnailPath = video.thumbnail?.let { thumb ->
+                thumb.childImages?.firstOrNull()?.path ?: thumb.path
+            }
+            if (!thumbnailPath.isNullOrEmpty()) {
+                Glide.with(rootView.context)
+                    .load(
+                        GlideUrl(
+                            thumbnailPath, LazyHeaders.Builder()
+                                .addHeader("User-Agent", AuthManager.peekUserAgent())
+                                .build()
                         )
-                        .centerCrop()
-                        .error(defaultCardImage)
-                        .into(image)
-                }
+                    )
+                    .centerCrop()
+                    .error(defaultCardImage)
+                    .into(image)
+            } else {
+                // No thumbnail for this post — show the placeholder rather than whatever
+                // image the recycled card was last holding.
+                Glide.with(rootView.context).clear(image)
+                image.setImageDrawable(defaultCardImage)
+            }
 
-                video.metadata?.videoDurationInSecs?.let { totalDurationSecs ->
-                    if (totalDurationSecs <= 0) {
-                        duration.isGone = true
-                    } else {
-                        duration.isVisible = true
-                        duration.text = formatDuration(totalDurationSecs)
-                    }
-                } ?: run { duration.isGone = true }
-
-                if (videoProgress != null) {
-                    progress.isVisible = true
-                    progress.min = 0
-                    progress.max = 100 // to get in milliseconds like watch time
-                    progress.progress = videoProgress.progress
+            video.metadata?.videoDurationInSecs?.let { totalDurationSecs ->
+                if (totalDurationSecs <= 0) {
+                    duration.isGone = true
                 } else {
-                    progress.isGone = true
+                    duration.isVisible = true
+                    duration.text = formatDuration(totalDurationSecs)
                 }
+            } ?: run { duration.isGone = true }
 
-                if (video.tags.isNotEmpty()) {
-                    tagList.removeAllViews()
-                    tagList.visibility = View.VISIBLE
-                    desc.maxLines = 1
+            if (videoProgress != null) {
+                progress.isVisible = true
+                progress.min = 0
+                progress.max = 100 // to get in milliseconds like watch time
+                progress.progress = videoProgress.progress
+            } else {
+                progress.isGone = true
+            }
 
-                    video.tags.forEach { tag ->
-                        (LayoutInflater.from(rootView.context)
-                            .inflate(R.layout.view_tag, tagList, false) as TextView).apply {
-                            @Suppress("SetTextI18n")
-                            text = "#$tag"
-                            backgroundTintList = ColorStateList.valueOf(rootView.context.getTagColor(tag))
-                            tagList.addView(this)
-                        }
+            tagList.removeAllViews()
+            if (video.tags.isNotEmpty()) {
+                tagList.visibility = View.VISIBLE
+                desc.maxLines = 1
+
+                video.tags.forEach { tag ->
+                    (LayoutInflater.from(rootView.context)
+                        .inflate(R.layout.view_tag, tagList, false) as TextView).apply {
+                        @Suppress("SetTextI18n")
+                        text = "#$tag"
+                        backgroundTintList = ColorStateList.valueOf(rootView.context.getTagColor(tag))
+                        tagList.addView(this)
                     }
-                } else {
-                    tagList.removeAllViews()
-                    tagList.visibility = View.GONE
-                    desc.maxLines = 2
                 }
+            } else {
+                tagList.visibility = View.GONE
+                desc.maxLines = 2
             }
         }
 
