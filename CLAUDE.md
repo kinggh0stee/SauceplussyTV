@@ -11,13 +11,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & run
 
 ```bash
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:assembleDebug   # build / compile check
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:assembleDebug   # build / compile check (both flavors)
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew :app:lint            # Android lint
 ```
 
 **Critical:** The system JDK may break AGP 9.2.1. Always use `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`. If `gradlew` is not executable: `chmod +x gradlew`.
 
-There is a small JVM-only unit-test suite (`./gradlew :app:testDebugUnitTest`) covering `MainViewModel` and `VideoDetailsViewModel` against fake repositories — no instrumentation tests. Everything UI-, playback-, or auth-related is still unverified by tests, so "verify it works" means it compiles (`assembleDebug`), the unit tests pass, and it behaves correctly on a TV device/emulator with a D-pad.
+### Product flavors
+
+Two flavors on the `distribution` dimension, differing only in `BuildConfig.UPDATE_CHECK_ENABLED`:
+
+| Flavor | Update check | Use |
+|---|---|---|
+| `sideload` | enabled | GitHub-releases builds; shows the "Update Available" dialog |
+| `play` | disabled | Google Play; Play forbids pointing users at another source for updates |
+
+Flavors make task names variant-qualified — `testDebugUnitTest` and `lintDebug` **do not exist**. Use `testSideloadDebugUnitTest` / `lintSideloadDebug` (or the `test` / `lint` aggregates). `assembleDebug` still builds both.
+
+### Release build
+
+`minifyEnabled true` — R8 and resource shrinking are on. Any new reflectively-accessed type (Gson DTO, socket payload) needs a keep rule in `proguard-rules.pro` or it will be silently obfuscated and fail to deserialize at runtime. After changing keep rules, verify against `app/build/outputs/mapping/<variant>/mapping.txt` that the class maps to itself.
+
+Signing reads `keystore.properties` (gitignored) or the `STORE_FILE` / `STORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` env vars:
+
+```bash
+./gradlew :app:bundlePlayRelease        # .aab for Play upload
+./gradlew :app:assembleSideloadRelease  # .apk for GitHub releases
+```
+
+There is a small JVM-only unit-test suite (`./gradlew :app:testSideloadDebugUnitTest`) covering `MainViewModel` and `VideoDetailsViewModel` against fake repositories — no instrumentation tests. Everything UI-, playback-, or auth-related is still unverified by tests, so "verify it works" means it compiles (`assembleDebug`), the unit tests pass, and it behaves correctly on a TV device/emulator with a D-pad.
 
 The SDK is not preinstalled in every environment. If Gradle reports "SDK location not found", install the command-line tools and point `local.properties` at them (`sdk.dir=...`); this project needs `platforms;android-37.0` (note the `.0` — plain `android-37` does not exist) and `build-tools;37.0.0`.
 

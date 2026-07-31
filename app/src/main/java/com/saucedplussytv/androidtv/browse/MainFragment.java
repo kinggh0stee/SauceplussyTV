@@ -228,6 +228,14 @@ public class MainFragment extends BrowseSupportFragment {
 
         checkLogin();
 
+        // Sideload builds only. A Play-distributed app may not point users at another
+        // source for its own updates, so the Play flavor disables this entirely.
+        if (BuildConfig.UPDATE_CHECK_ENABLED) {
+            checkForUpdates();
+        }
+    }
+
+    private void checkForUpdates() {
         client.getLatest(v -> {
             if (!isAdded() || getContext() == null) return Unit.INSTANCE;
             if (v == null || v.length() < 2) return Unit.INSTANCE;
