@@ -28,20 +28,23 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
+      # assembleDebug still aggregates every debug variant, but the per-variant test and
+      # lint tasks are flavor-qualified now that sideload/play flavors exist —
+      # testDebugUnitTest and lintDebug no longer exist.
+      - name: Build debug APKs (both flavors)
         run: ./gradlew :app:assembleDebug
 
       - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew :app:testSideloadDebugUnitTest :app:testPlayDebugUnitTest
 
       - name: Run lint
-        run: ./gradlew :app:lint
+        run: ./gradlew :app:lintSideloadDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: SaucedplussyTV-debug
-          path: app/build/outputs/apk/debug/SaucedplussyTV-debug.apk
+          path: app/build/outputs/apk/sideload/debug/SaucedplussyTV-sideloadDebug.apk
           retention-days: 14
 
       - name: Upload unit test results
@@ -49,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: unit-test-results
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: app/build/reports/tests/
           retention-days: 14
 
       - name: Upload lint results
@@ -57,5 +60,5 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: lint-results
-          path: app/build/reports/lint-results-debug.html
+          path: app/build/reports/lint-results-sideloadDebug.html
           retention-days: 14

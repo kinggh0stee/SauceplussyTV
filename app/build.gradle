@@ -15,10 +15,30 @@ android {
         applicationId "com.saucedplussytv.androidtv"
 
         minSdkVersion = 26
-        targetSdkVersion = 35
+        // Google Play requires new submissions to target within one year of the latest
+        // major Android release; the window rolls over each August.
+        targetSdkVersion = 36
         versionCode 10001   // major*10000 + minor*100 + patch; 1.0.1 = 10001, 1.1.0 = 10100
         versionName "1.0.1"
 
+    }
+
+    // Distribution channel, not a code difference: both flavors ship the same app. The
+    // Play build must not advertise GitHub releases — Play policy forbids an app
+    // distributed there from pointing users at another source for its own updates.
+    // Making this a flavor (rather than a Gradle flag) means the Play artifact cannot be
+    // produced with the wrong setting by forgetting a command-line property.
+    flavorDimensions = ['distribution']
+
+    productFlavors {
+        sideload {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'UPDATE_CHECK_ENABLED', 'true'
+        }
+        play {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'UPDATE_CHECK_ENABLED', 'false'
+        }
     }
 
     compileOptions {
@@ -44,9 +64,11 @@ android {
         release {
             signingConfig signingConfigs.release
             buildConfigField("String","VERSION_NAME","\"${defaultConfig.versionName}\"")
-            // R8 disabled for v1.0.0: Gson DTOs and socket.io need keep rules before enabling.
-            // See proguard-rules.pro for the required rules — enable minifyEnabled true once validated.
-            minifyEnabled false
+            // R8 on: keep rules in proguard-rules.pro cover the Gson DTOs (including the
+            // socket event classes that sit alongside SyncEvent/UserSync), socket.io, and
+            // the WebView JS bridge. Any new reflectively-accessed type needs a rule there.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

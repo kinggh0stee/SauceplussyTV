@@ -12,8 +12,26 @@
 -keep class com.saucedplussytv.androidtv.creator.** { *; }
 -keep class com.saucedplussytv.androidtv.post.** { *; }
 -keep class com.saucedplussytv.androidtv.subscription.** { *; }
+# SyncEvent.kt and UserSync.kt each declare several top-level classes (Data, Target,
+# Video, Post, Metadata, Body). Naming only SyncEvent/UserSync left those siblings
+# obfuscated, so Gson could not bind their fields — keep every socket DTO by listing
+# the nested-payload types explicitly.
 -keep class com.saucedplussytv.androidtv.client.SyncEvent { *; }
+-keep class com.saucedplussytv.androidtv.client.Data { *; }
+-keep class com.saucedplussytv.androidtv.client.Target { *; }
+-keep class com.saucedplussytv.androidtv.client.Video { *; }
+-keep class com.saucedplussytv.androidtv.client.Post { *; }
+-keep class com.saucedplussytv.androidtv.client.Metadata { *; }
 -keep class com.saucedplussytv.androidtv.client.UserSync { *; }
+-keep class com.saucedplussytv.androidtv.client.Body { *; }
+
+# Gson uses the generic type argument of TypeToken at runtime (getVideoProgress uses
+# TypeToken<List<VideoProgress>>); without this the erased signature breaks binding.
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+
+# github.Release is deserialized by the update check but sits outside the kept packages.
+-keep class com.saucedplussytv.androidtv.github.** { *; }
 -dontwarn com.google.gson.**
 
 # ---- socket.io-client / engine.io ----
